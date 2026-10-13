@@ -307,8 +307,9 @@ func runInit(args []string) error {
 	if err != nil {
 		return err
 	}
+	gitHabitsPreset := projectGitHabitsPreset(root, preferences.GitHabitsPreset)
 	if *profile == "" {
-		*profile = projectProfile(root, preferences.Profile)
+		*profile = projectProfile(root, preferenceProfile(preferences))
 	}
 	languages, editLanguages, proposalSource, err := resolveLanguageSelection(root, languages, preferences.Languages, interactive)
 	if err != nil {
@@ -324,7 +325,7 @@ func runInit(args []string) error {
 		*remember = *remember || save
 	}
 	if *profile == "" {
-		*profile = projectProfile(root, preferences.Profile)
+		*profile = projectProfile(root, preferenceProfile(preferences))
 	}
 	if strings.TrimSpace(*problem) == "" {
 		if manifest, manifestErr := gitbbq.ReadManifest(root); manifestErr == nil {
@@ -346,6 +347,7 @@ func runInit(args []string) error {
 		Problem:         *problem,
 		Languages:       languages,
 		Profile:         *profile,
+		GitHabitsPreset: gitHabitsPreset,
 		ActionOverrides: overrides,
 		Force:           *force,
 		Bootstrap:       *bootstrap,
@@ -355,7 +357,11 @@ func runInit(args []string) error {
 		return err
 	}
 	if *remember {
-		if err := gitbbq.SavePreferences(gitbbq.Preferences{Profile: *profile, Languages: languages}); err != nil {
+		policy, err := gitbbq.ReadGitHabits(root)
+		if err != nil {
+			return err
+		}
+		if err := gitbbq.SavePreferences(gitbbq.Preferences{Profile: *profile, Languages: languages, GitHabitsPreset: &policy}); err != nil {
 			return err
 		}
 	}
@@ -413,8 +419,9 @@ func runApply(args []string) error {
 	if err != nil {
 		return err
 	}
+	gitHabitsPreset := projectGitHabitsPreset(root, preferences.GitHabitsPreset)
 	if *profile == "" {
-		*profile = projectProfile(root, preferences.Profile)
+		*profile = projectProfile(root, preferenceProfile(preferences))
 	}
 	languages, editLanguages, proposalSource, err := resolveLanguageSelection(root, languages, preferences.Languages, interactive)
 	if err != nil {
@@ -429,7 +436,7 @@ func runApply(args []string) error {
 		*remember = *remember || save
 	}
 	if *profile == "" {
-		*profile = projectProfile(root, preferences.Profile)
+		*profile = projectProfile(root, preferenceProfile(preferences))
 	}
 	if strings.TrimSpace(*problem) == "" {
 		if manifest, manifestErr := gitbbq.ReadManifest(root); manifestErr == nil {
@@ -449,12 +456,16 @@ func runApply(args []string) error {
 	if _, err := gitbbq.Assess(root); err != nil {
 		return err
 	}
-	result, err := gitbbq.ScaffoldProject(root, gitbbq.ScaffoldOptions{ProjectName: *projectName, Problem: *problem, Languages: languages, Profile: *profile, ActionOverrides: overrides, Force: *force, AllowHere: true})
+	result, err := gitbbq.ScaffoldProject(root, gitbbq.ScaffoldOptions{ProjectName: *projectName, Problem: *problem, Languages: languages, Profile: *profile, GitHabitsPreset: gitHabitsPreset, ActionOverrides: overrides, Force: *force, AllowHere: true})
 	if err != nil {
 		return err
 	}
 	if *remember {
-		if err := gitbbq.SavePreferences(gitbbq.Preferences{Profile: *profile, Languages: languages}); err != nil {
+		policy, err := gitbbq.ReadGitHabits(root)
+		if err != nil {
+			return err
+		}
+		if err := gitbbq.SavePreferences(gitbbq.Preferences{Profile: *profile, Languages: languages, GitHabitsPreset: &policy}); err != nil {
 			return err
 		}
 	}
@@ -1061,6 +1072,20 @@ func projectProfile(root, fallback string) string {
 		return fallback
 	}
 	return "guided"
+}
+
+func preferenceProfile(preferences gitbbq.Preferences) string {
+	if preferences.GitHabitsPreset != nil {
+		return preferences.GitHabitsPreset.Profile
+	}
+	return preferences.Profile
+}
+
+func projectGitHabitsPreset(root string, fallback *gitbbq.GitHabits) *gitbbq.GitHabits {
+	if config, err := gitbbq.ReadGitHabits(root); err == nil {
+		return &config
+	}
+	return fallback
 }
 
 func projectLanguages(root string, fallback []string) stringList {

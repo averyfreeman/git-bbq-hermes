@@ -2,8 +2,22 @@ package gitbbq
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
+
+func TestPlanRemoteProvisionRequiresExplicitVisibility(t *testing.T) {
+	config, err := GitHabitsForProfile("autonomous")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Remote.Owner = "averyfreeman"
+	config.Remote.Name = "example-project"
+
+	if _, err := PlanRemoteProvision(config); err == nil || !strings.Contains(err.Error(), "visibility") {
+		t.Fatalf("unspecified remote visibility error = %v", err)
+	}
+}
 
 func TestPlanRemoteProvisionBuildsApprovalGatedGitHubCommand(t *testing.T) {
 	config, err := GitHabitsForProfile("autonomous")
@@ -12,6 +26,7 @@ func TestPlanRemoteProvisionBuildsApprovalGatedGitHubCommand(t *testing.T) {
 	}
 	config.Remote.Owner = "averyfreeman"
 	config.Remote.Name = "example-project"
+	config.Remote.Visibility = "private"
 
 	plan, err := PlanRemoteProvision(config)
 	if err != nil {
@@ -32,6 +47,7 @@ func TestExecuteRemoteProvisionRunsApprovedGhCommand(t *testing.T) {
 	}
 	config.Remote.Owner = "averyfreeman"
 	config.Remote.Name = "example-project"
+	config.Remote.Visibility = "private"
 	plan, err := PlanRemoteProvision(config)
 	if err != nil {
 		t.Fatal(err)

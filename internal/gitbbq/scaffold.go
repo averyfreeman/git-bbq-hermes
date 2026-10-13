@@ -30,12 +30,29 @@ func ScaffoldProject(root string, options ScaffoldOptions) (ScaffoldResult, erro
 		return ScaffoldResult{}, err
 	}
 	profile := options.Profile
+	if strings.TrimSpace(profile) == "" && options.GitHabitsPreset != nil {
+		profile = options.GitHabitsPreset.Profile
+	}
 	if strings.TrimSpace(profile) == "" {
 		profile = "guided"
 	}
-	gitHabits, err := GitHabitsForProfile(profile)
-	if err != nil {
-		return ScaffoldResult{}, err
+	var gitHabits GitHabits
+	if options.GitHabitsPreset != nil {
+		gitHabits = *options.GitHabitsPreset
+		if gitHabits.Profile != profile {
+			profileDefaults, err := GitHabitsForProfile(profile)
+			if err != nil {
+				return ScaffoldResult{}, err
+			}
+			gitHabits.Profile = profileDefaults.Profile
+			gitHabits.Actions = profileDefaults.Actions
+		}
+	} else {
+		var err error
+		gitHabits, err = GitHabitsForProfile(profile)
+		if err != nil {
+			return ScaffoldResult{}, err
+		}
 	}
 	for action, allowed := range options.ActionOverrides {
 		if err := gitHabits.SetAction(action, allowed); err != nil {
@@ -307,7 +324,7 @@ func renderContextMap() string {
 }
 
 func renderGithabitsSkill() string {
-	return "---\nname: githabits\ndescription: Apply the repository's explicit Git workflow policy.\n---\n\n# Githabits\n\nRead `.githabits.yaml` before any Git mutation. The profile is only a default; the action-level switches are authoritative and may revoke autonomous behavior.\n\n## Action contract\n\n- `init`: initialize Git only when `actions.init` is enabled.\n- `branch`: create or switch branches using the configured branch convention.\n- `stage`: stage only the reviewed repository changes; never stage secrets or unrelated paths.\n- `commit`: use the configured commit style and explain the material change.\n- `tag`: use the configured SemVer tag convention, beginning at `initial_tag`.\n- `remote`: configure the declared provider and alias only after the remote is known.\n- `push`: push only when `actions.push` is enabled, the remote status is `configured`, and validation has passed.\n\nAll actions remain subject to user approval, repository safety checks, and the\nCodex host's permissions. Never expose credentials, rewrite shared history,\nforce-push, delete branches, or weaken validation to make a workflow pass.\n"
+	return "---\nname: githabits\ndescription: Apply the repository's explicit Git workflow policy.\n---\n\n# Githabits\n\nRead `.githabits.yaml` before any Git mutation. Version-1 policies remain readable; version 2 records authorization, release, push, and remote-visibility policy. The repository file is authoritative, and a user preset seeds only new projects.\n\n## Authorization and action contract\n\n- `authorization.scope: workflow` means one explicit user request can cover the requested sequence; do not extend that authorization to unrelated work.\n- `actions.*` are per-operation permission switches and take precedence over the profile. Never perform a denied action.\n- The Go CLI still requires `--approve` for every mutating execution; this execution gate does not require a second user prompt.\n- `init`: initialize Git only when `actions.init` is enabled.\n- `branch`: create or switch branches using the configured branch convention.\n- `stage`: stage only the reviewed repository changes; never stage secrets or unrelated paths.\n- `commit`: use the configured commit style and explain the material change.\n- `tag`: use the configured SemVer tag convention, beginning at `initial_tag`. Apply `release.commit_bumps` when recommending a release increment. Establish or reset an initial baseline only within `release.initial_tag_scope`.\n- `remote`: configure the declared provider and alias only after the remote is known. If `remote.visibility` is absent, follow `remote.visibility_policy` and ask the user rather than guessing.\n- `push`: push only when `actions.push` is enabled, the remote status is `configured`, and validation has passed. Follow `push.target`, `push.after_commit`, and `push.after_tag`.\n\nNever expose credentials, rewrite shared history, force-push, delete branches, or weaken validation to make a workflow pass.\n"
 }
 
 func renderLanguageSkill(language string) string {

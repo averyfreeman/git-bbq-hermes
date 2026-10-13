@@ -1,24 +1,12 @@
-# Githabits workflow preference for this repository.
-# The current origin was explicitly created public and is already configured.
-# If a workflow must create a remote in the future, ask public/private first
-# unless the user's request already specifies visibility.
-#
-# After major Hermes migration changes, remove inherited version tags only from
-# this new repository and establish v0.1.0 as its first project release. Never
-# rewrite tags in upstream. Then use SemVer (patch for fixes, minor for features,
-# major for breaking changes). Push the current origin branch after each commit and push each
-# tag to origin immediately after creating it. One explicit workflow-level
-# authorization covers the sequence; retain Git BBQ's --approve execution gate.
-# `semantic_release` records this intent, but the current CLI does not calculate
-# version bumps yet; the agent must choose the SemVer increment until implemented.
+# GitHabits v2 is the source of truth for this repository's Git policy.
+# This repository's GitHub remote is explicitly public and already configured.
 schema_version: "1.0.0"
-version: 1
+version: 2
 profile: autonomous
 branch: main
 versioning: semver
 initial_tag: v0.1.0
 commit_style: conventional-commits
-semantic_release: true
 actions:
   init: false
   branch: true
@@ -27,11 +15,26 @@ actions:
   tag: true
   remote: false
   push: true
+authorization:
+  scope: workflow
+release:
+  initial_tag_scope: new-repository-only
+  commit_bumps:
+    breaking_change: major
+    feature: minor
+    fix: patch
+    performance: patch
+    other: none
+push:
+  target: current
+  after_commit: true
+  after_tag: true
 remote:
   provider: github
   owner: averyfreeman
   name: git-bbq-hermes
   visibility: public
+  visibility_policy: ask-if-unspecified
   alias: origin
   status: configured
   url: https://github.com/averyfreeman/git-bbq-hermes.git

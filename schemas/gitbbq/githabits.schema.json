@@ -61,6 +61,79 @@
       ],
       "additionalProperties": false
     },
+    "authorization": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "scope"
+      ],
+      "additionalProperties": false
+    },
+    "release": {
+      "type": "object",
+      "properties": {
+        "initial_tag_scope": {
+          "type": "string"
+        },
+        "commit_bumps": {
+          "type": "object",
+          "properties": {
+            "breaking_change": {
+              "type": "string"
+            },
+            "feature": {
+              "type": "string"
+            },
+            "fix": {
+              "type": "string"
+            },
+            "performance": {
+              "type": "string"
+            },
+            "other": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "breaking_change",
+            "feature",
+            "fix",
+            "performance",
+            "other"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "initial_tag_scope",
+        "commit_bumps"
+      ],
+      "additionalProperties": false
+    },
+    "push": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string"
+        },
+        "after_commit": {
+          "type": "boolean"
+        },
+        "after_tag": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "target",
+        "after_commit",
+        "after_tag"
+      ],
+      "additionalProperties": false
+    },
     "remote": {
       "type": "object",
       "properties": {
@@ -76,6 +149,9 @@
         "visibility": {
           "type": "string"
         },
+        "visibility_policy": {
+          "type": "string"
+        },
         "alias": {
           "type": "string"
         },
@@ -88,7 +164,6 @@
       },
       "required": [
         "provider",
-        "visibility",
         "alias",
         "status"
       ],
@@ -104,7 +179,6 @@
     "versioning",
     "initial_tag",
     "commit_style",
-    "semantic_release",
     "actions",
     "remote"
   ],

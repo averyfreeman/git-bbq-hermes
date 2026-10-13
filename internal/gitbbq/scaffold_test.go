@@ -83,6 +83,25 @@ func TestScaffoldWritesMattNativeOutputs(t *testing.T) {
 	}
 }
 
+func TestGithabitsSkillDocumentsVersionTwoPolicy(t *testing.T) {
+	skill := renderGithabitsSkill()
+	for _, policyField := range []string{
+		"authorization.scope",
+		"release.initial_tag_scope",
+		"release.commit_bumps",
+		"push.after_commit",
+		"push.after_tag",
+		"remote.visibility_policy",
+	} {
+		if !strings.Contains(skill, policyField) {
+			t.Errorf("githabits skill omitted v2 policy field %q", policyField)
+		}
+	}
+	if strings.Contains(skill, "Codex") {
+		t.Fatal("generated githabits skill still describes Codex host permissions")
+	}
+}
+
 func TestAssessIsReadOnly(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o644); err != nil {

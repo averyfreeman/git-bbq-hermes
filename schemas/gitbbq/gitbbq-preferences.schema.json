@@ -1,0 +1,213 @@
+{
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "integer"
+    },
+    "profile": {
+      "type": "string"
+    },
+    "languages": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "githabits": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "versioning": {
+          "type": "string"
+        },
+        "initial_tag": {
+          "type": "string"
+        },
+        "commit_style": {
+          "type": "string"
+        },
+        "semantic_release": {
+          "type": "boolean"
+        },
+        "actions": {
+          "type": "object",
+          "properties": {
+            "init": {
+              "type": "boolean"
+            },
+            "branch": {
+              "type": "boolean"
+            },
+            "stage": {
+              "type": "boolean"
+            },
+            "commit": {
+              "type": "boolean"
+            },
+            "tag": {
+              "type": "boolean"
+            },
+            "remote": {
+              "type": "boolean"
+            },
+            "push": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "init",
+            "branch",
+            "stage",
+            "commit",
+            "tag",
+            "remote",
+            "push"
+          ],
+          "additionalProperties": false
+        },
+        "authorization": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "scope"
+          ],
+          "additionalProperties": false
+        },
+        "release": {
+          "type": "object",
+          "properties": {
+            "initial_tag_scope": {
+              "type": "string"
+            },
+            "commit_bumps": {
+              "type": "object",
+              "properties": {
+                "breaking_change": {
+                  "type": "string"
+                },
+                "feature": {
+                  "type": "string"
+                },
+                "fix": {
+                  "type": "string"
+                },
+                "performance": {
+                  "type": "string"
+                },
+                "other": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "breaking_change",
+                "feature",
+                "fix",
+                "performance",
+                "other"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "initial_tag_scope",
+            "commit_bumps"
+          ],
+          "additionalProperties": false
+        },
+        "push": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string"
+            },
+            "after_commit": {
+              "type": "boolean"
+            },
+            "after_tag": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "target",
+            "after_commit",
+            "after_tag"
+          ],
+          "additionalProperties": false
+        },
+        "remote": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "visibility": {
+              "type": "string"
+            },
+            "visibility_policy": {
+              "type": "string"
+            },
+            "alias": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "provider",
+            "alias",
+            "status"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "version",
+        "profile",
+        "branch",
+        "versioning",
+        "initial_tag",
+        "commit_style",
+        "actions",
+        "remote"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "required": [
+    "version"
+  ],
+  "additionalProperties": false
+}

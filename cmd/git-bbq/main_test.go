@@ -76,6 +76,7 @@ func TestRunGithabitsPlanBuildsRemoteProvisionPlan(t *testing.T) {
 	}
 	config.Remote.Owner = "averyfreeman"
 	config.Remote.Name = "example-project"
+	config.Remote.Visibility = "private"
 	data, err := yaml.Marshal(config)
 	if err != nil {
 		t.Fatal(err)
@@ -200,6 +201,132 @@ func TestRunInitUsesSavedUserLanguagesWithoutDetection(t *testing.T) {
 	}
 	if strings.Join(manifest.Languages, ",") != "python" {
 		t.Fatalf("manifest languages = %#v", manifest.Languages)
+	}
+}
+
+func TestRunInitAppliesSavedGitHabitsPreset(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(t.TempDir(), "preferences.yaml")
+	t.Setenv("GIT_BBQ_CONFIG", configPath)
+	preferences := `version: 1
+languages: [go]
+githabits:
+  schema_version: 1.0.0
+  version: 2
+  profile: autonomous
+  branch: feature/from-preset
+  versioning: semver
+  initial_tag: v0.1.0
+  commit_style: conventional-commits
+  actions:
+    init: true
+    branch: true
+    stage: true
+    commit: true
+    tag: true
+    remote: true
+    push: true
+  authorization:
+    scope: workflow
+  release:
+    initial_tag_scope: new-repository-only
+    commit_bumps:
+      breaking_change: major
+      feature: minor
+      fix: patch
+      performance: patch
+      other: none
+  push:
+    target: current
+    after_commit: true
+    after_tag: true
+  remote:
+    provider: github
+    visibility_policy: ask-if-unspecified
+    alias: origin
+    status: pending
+`
+	if err := os.WriteFile(configPath, []byte(preferences), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runInit([]string{"--problem", "Use the saved Git policy.", "--json", root}); err != nil {
+		t.Fatal(err)
+	}
+	policy, err := os.ReadFile(filepath.Join(root, gitbbq.GitHabitsFilename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		"version: 2",
+		"profile: autonomous",
+		"branch: feature/from-preset",
+		"scope: workflow",
+		"initial_tag_scope: new-repository-only",
+		"after_commit: true",
+		"after_tag: true",
+		"visibility_policy: ask-if-unspecified",
+	} {
+		if !strings.Contains(string(policy), expected) {
+			t.Errorf("generated GitHabits omitted preset value %q:\n%s", expected, policy)
+		}
+	}
+}
+
+func TestRunInitRememberSavesGitHabitsPreset(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(t.TempDir(), "preferences.yaml")
+	t.Setenv("GIT_BBQ_CONFIG", configPath)
+	if err := runInit([]string{"--problem", "Remember this Git policy.", "--language", "go", "--profile", "autonomous", "--remember", "--json", root}); err != nil {
+		t.Fatal(err)
+	}
+	preferences, err := gitbbq.LoadPreferences()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preferences.GitHabitsPreset == nil {
+		t.Fatal("remember did not save a GitHabits preset")
+	}
+	if preferences.GitHabitsPreset.Version != 2 || preferences.GitHabitsPreset.Profile != "autonomous" || !preferences.GitHabitsPreset.Actions.Commit {
+		t.Fatalf("saved preset = %#v", preferences.GitHabitsPreset)
+	}
+}
+
+func TestRunInitPreservesProjectGitHabitsOverUserPreset(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("GIT_BBQ_CONFIG", filepath.Join(t.TempDir(), "preferences.yaml"))
+	userPreset, err := gitbbq.GitHabitsForProfile("autonomous")
+	if err != nil {
+		t.Fatal(err)
+	}
+	userPreset.Branch = "user/preset"
+	userPreset.InitialTag = "v9.9.9"
+	if err := gitbbq.SavePreferences(gitbbq.Preferences{GitHabitsPreset: &userPreset}); err != nil {
+		t.Fatal(err)
+	}
+	projectPolicy, err := gitbbq.GitHabitsForProfile("guided")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectPolicy.Branch = "project/override"
+	if _, err := gitbbq.ScaffoldProject(root, gitbbq.ScaffoldOptions{
+		Problem:         "Keep repository policy above user defaults.",
+		Languages:       []string{"go"},
+		Profile:         projectPolicy.Profile,
+		GitHabitsPreset: &projectPolicy,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runInit([]string{"--problem", "Keep repository policy above user defaults.", "--language", "go", "--here", "--force", "--json", root}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := gitbbq.ReadGitHabits(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Profile != "guided" || result.Branch != "project/override" || result.Actions.Commit {
+		t.Fatalf("project policy was not preserved over the user preset: %#v", result)
 	}
 }
 

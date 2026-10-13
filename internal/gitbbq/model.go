@@ -77,13 +77,14 @@ type Manifest struct {
 
 // RemoteConfig records the configured Git remote provider and its lifecycle state.
 type RemoteConfig struct {
-	Provider   string `yaml:"provider" json:"provider"`
-	Owner      string `yaml:"owner,omitempty" json:"owner,omitempty"`
-	Name       string `yaml:"name,omitempty" json:"name,omitempty"`
-	Visibility string `yaml:"visibility" json:"visibility"`
-	Alias      string `yaml:"alias" json:"alias"`
-	Status     string `yaml:"status" json:"status"`
-	URL        string `yaml:"url,omitempty" json:"url,omitempty"`
+	Provider         string `yaml:"provider" json:"provider"`
+	Owner            string `yaml:"owner,omitempty" json:"owner,omitempty"`
+	Name             string `yaml:"name,omitempty" json:"name,omitempty"`
+	Visibility       string `yaml:"visibility,omitempty" json:"visibility,omitempty"`
+	VisibilityPolicy string `yaml:"visibility_policy,omitempty" json:"visibility_policy,omitempty"`
+	Alias            string `yaml:"alias" json:"alias"`
+	Status           string `yaml:"status" json:"status"`
+	URL              string `yaml:"url,omitempty" json:"url,omitempty"`
 }
 
 // GitActions contains the per-action permissions used by GitHabits.
@@ -97,18 +98,51 @@ type GitActions struct {
 	Push   bool `yaml:"push" json:"push"`
 }
 
+// GitAuthorizationPolicy declares whether one authorization covers an
+// individual action or the requested workflow. The CLI approval gate remains
+// required independently of this policy.
+type GitAuthorizationPolicy struct {
+	Scope string `yaml:"scope" json:"scope"`
+}
+
+// GitCommitBumps maps conventional-commit categories to SemVer increments.
+type GitCommitBumps struct {
+	BreakingChange string `yaml:"breaking_change" json:"breaking_change"`
+	Feature        string `yaml:"feature" json:"feature"`
+	Fix            string `yaml:"fix" json:"fix"`
+	Performance    string `yaml:"performance" json:"performance"`
+	Other          string `yaml:"other" json:"other"`
+}
+
+// GitReleasePolicy records the safe scope for establishing the initial tag
+// and the configured conventional-commit release mapping.
+type GitReleasePolicy struct {
+	InitialTagScope string         `yaml:"initial_tag_scope" json:"initial_tag_scope"`
+	CommitBumps     GitCommitBumps `yaml:"commit_bumps" json:"commit_bumps"`
+}
+
+// GitPushPolicy records the branch target and automatic push cadence.
+type GitPushPolicy struct {
+	Target      string `yaml:"target" json:"target"`
+	AfterCommit bool   `yaml:"after_commit" json:"after_commit"`
+	AfterTag    bool   `yaml:"after_tag" json:"after_tag"`
+}
+
 // GitHabits is the project's explicit policy for planning and executing Git actions.
 type GitHabits struct {
-	SchemaVersion   string       `yaml:"schema_version" json:"schema_version"`
-	Version         int          `yaml:"version" json:"version"`
-	Profile         string       `yaml:"profile" json:"profile"`
-	Branch          string       `yaml:"branch" json:"branch"`
-	Versioning      string       `yaml:"versioning" json:"versioning"`
-	InitialTag      string       `yaml:"initial_tag" json:"initial_tag"`
-	CommitStyle     string       `yaml:"commit_style" json:"commit_style"`
-	SemanticRelease bool         `yaml:"semantic_release" json:"semantic_release"`
-	Actions         GitActions   `yaml:"actions" json:"actions"`
-	Remote          RemoteConfig `yaml:"remote" json:"remote"`
+	SchemaVersion   string                 `yaml:"schema_version" json:"schema_version"`
+	Version         int                    `yaml:"version" json:"version"`
+	Profile         string                 `yaml:"profile" json:"profile"`
+	Branch          string                 `yaml:"branch" json:"branch"`
+	Versioning      string                 `yaml:"versioning" json:"versioning"`
+	InitialTag      string                 `yaml:"initial_tag" json:"initial_tag"`
+	CommitStyle     string                 `yaml:"commit_style" json:"commit_style"`
+	SemanticRelease bool                   `yaml:"semantic_release,omitempty" json:"semantic_release,omitempty"`
+	Actions         GitActions             `yaml:"actions" json:"actions"`
+	Authorization   GitAuthorizationPolicy `yaml:"authorization,omitempty" json:"authorization,omitempty"`
+	Release         GitReleasePolicy       `yaml:"release,omitempty" json:"release,omitempty"`
+	Push            GitPushPolicy          `yaml:"push,omitempty" json:"push,omitempty"`
+	Remote          RemoteConfig           `yaml:"remote" json:"remote"`
 }
 
 // GitAction names a Git operation supported by the policy planner.
@@ -151,15 +185,26 @@ func DefaultManifest(projectName string) Manifest {
 // DefaultGitHabits returns the guided policy defaults for a new project.
 func DefaultGitHabits() GitHabits {
 	return GitHabits{
-		SchemaVersion:   SchemaVersion,
-		Version:         1,
-		Profile:         "guided",
-		Branch:          "main",
-		Versioning:      "semver",
-		InitialTag:      "v0.1.0",
-		CommitStyle:     "conventional-commits",
-		SemanticRelease: false,
-		Remote:          RemoteConfig{Provider: "github", Visibility: "private", Alias: "origin", Status: "pending"},
+		SchemaVersion: SchemaVersion,
+		Version:       2,
+		Profile:       "guided",
+		Branch:        "main",
+		Versioning:    "semver",
+		InitialTag:    "v0.1.0",
+		CommitStyle:   "conventional-commits",
+		Authorization: GitAuthorizationPolicy{Scope: "workflow"},
+		Release: GitReleasePolicy{
+			InitialTagScope: "new-repository-only",
+			CommitBumps: GitCommitBumps{
+				BreakingChange: "major",
+				Feature:        "minor",
+				Fix:            "patch",
+				Performance:    "patch",
+				Other:          "none",
+			},
+		},
+		Push:   GitPushPolicy{Target: "current", AfterCommit: true, AfterTag: true},
+		Remote: RemoteConfig{Provider: "github", VisibilityPolicy: "ask-if-unspecified", Alias: "origin", Status: "pending"},
 	}
 }
 
@@ -286,8 +331,8 @@ func ValidateGitHabits(config GitHabits) error {
 	if config.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("unsupported githabits schema_version %q", config.SchemaVersion)
 	}
-	if config.Version < 1 {
-		return fmt.Errorf("githabits version must be positive")
+	if config.Version != 1 && config.Version != 2 {
+		return fmt.Errorf("unsupported githabits version %d", config.Version)
 	}
 	if config.Profile != "manual" && config.Profile != "guided" && config.Profile != "autonomous" {
 		return fmt.Errorf("unsupported githabits profile %q", config.Profile)
@@ -307,8 +352,11 @@ func ValidateGitHabits(config GitHabits) error {
 	if config.Remote.Provider != "github" && config.Remote.Provider != "custom" {
 		return fmt.Errorf("unsupported remote provider %q", config.Remote.Provider)
 	}
-	if config.Remote.Visibility != "private" && config.Remote.Visibility != "public" && config.Remote.Visibility != "internal" {
+	if config.Remote.Visibility != "" && config.Remote.Visibility != "private" && config.Remote.Visibility != "public" && config.Remote.Visibility != "internal" {
 		return fmt.Errorf("unsupported remote visibility %q", config.Remote.Visibility)
+	}
+	if config.Version == 1 && config.Remote.Visibility == "" {
+		return fmt.Errorf("remote visibility is required for githabits version 1")
 	}
 	if !safeGitRef(config.Remote.Alias) {
 		return fmt.Errorf("remote alias is not a safe Git ref: %q", config.Remote.Alias)
@@ -319,7 +367,32 @@ func ValidateGitHabits(config GitHabits) error {
 	if config.Remote.Status == "configured" && strings.TrimSpace(config.Remote.URL) == "" {
 		return fmt.Errorf("configured remote must include a URL")
 	}
+	if config.Version == 2 {
+		if config.Authorization.Scope != "workflow" && config.Authorization.Scope != "per-action" {
+			return fmt.Errorf("unsupported authorization scope %q", config.Authorization.Scope)
+		}
+		if config.Release.InitialTagScope != "new-repository-only" && config.Release.InitialTagScope != "never" {
+			return fmt.Errorf("unsupported initial tag scope %q", config.Release.InitialTagScope)
+		}
+		if !validCommitBump(config.Release.CommitBumps.BreakingChange) ||
+			!validCommitBump(config.Release.CommitBumps.Feature) ||
+			!validCommitBump(config.Release.CommitBumps.Fix) ||
+			!validCommitBump(config.Release.CommitBumps.Performance) ||
+			!validCommitBump(config.Release.CommitBumps.Other) {
+			return fmt.Errorf("release commit bump values must be major, minor, patch, or none")
+		}
+		if config.Push.Target != "current" {
+			return fmt.Errorf("unsupported push target %q", config.Push.Target)
+		}
+		if config.Remote.VisibilityPolicy != "ask-if-unspecified" && config.Remote.VisibilityPolicy != "require-explicit" {
+			return fmt.Errorf("unsupported remote visibility policy %q", config.Remote.VisibilityPolicy)
+		}
+	}
 	return nil
+}
+
+func validCommitBump(value string) bool {
+	return value == "major" || value == "minor" || value == "patch" || value == "none"
 }
 
 func supportedLanguage(language string) bool {
@@ -360,6 +433,7 @@ type ScaffoldOptions struct {
 	Problem         string
 	Languages       []string
 	Profile         string
+	GitHabitsPreset *GitHabits
 	ActionOverrides map[GitAction]bool
 	Force           bool
 	Bootstrap       bool

@@ -23,6 +23,9 @@ func PlanRemoteProvision(config GitHabits) (GitPlan, error) {
 	if strings.TrimSpace(config.Remote.URL) != "" {
 		return GitPlan{}, fmt.Errorf("remote provisioning cannot replace an existing remote URL")
 	}
+	if config.Remote.Visibility == "" {
+		return GitPlan{}, fmt.Errorf("remote visibility is unspecified; ask the user before creating the remote")
+	}
 	if !safeRemoteComponent(config.Remote.Owner) || !safeRemoteComponent(config.Remote.Name) {
 		return GitPlan{}, fmt.Errorf("remote provisioning requires safe owner and repository name")
 	}

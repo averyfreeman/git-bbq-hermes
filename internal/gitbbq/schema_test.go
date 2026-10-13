@@ -12,7 +12,7 @@ func TestGenerateSchemasReflectsGoContracts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(schemas) != 5 {
+	if len(schemas) != 6 {
 		t.Fatalf("schema count = %d", len(schemas))
 	}
 	for name, data := range schemas {
@@ -23,13 +23,30 @@ func TestGenerateSchemasReflectsGoContracts(t *testing.T) {
 	}
 }
 
+func TestGenerateSchemasIncludesUserGitHabitsPresetContract(t *testing.T) {
+	schemas, err := GenerateSchemas()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, ok := schemas["gitbbq-preferences.schema.json"]
+	if !ok {
+		t.Fatal("generated schemas omitted the user preferences contract")
+	}
+	content := string(data)
+	for _, field := range []string{"githabits", "languages", "profile"} {
+		if !strings.Contains(content, field) {
+			t.Errorf("user preferences schema omitted field %q: %s", field, content)
+		}
+	}
+}
+
 func TestWriteSchemasUsesStableProjectDirectory(t *testing.T) {
 	root := t.TempDir()
 	paths, err := WriteSchemas(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(paths) != 5 {
+	if len(paths) != 6 {
 		t.Fatalf("paths = %#v", paths)
 	}
 	for _, path := range paths {

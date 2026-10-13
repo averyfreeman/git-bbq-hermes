@@ -4,14 +4,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Preferences contains the user's default Git policy profile and optional
 // language selection used by CLI setup.
 type Preferences struct {
-	Version   int      `yaml:"version" json:"version"`
-	Profile   string   `yaml:"profile" json:"profile"`
-	Languages []string `yaml:"languages,omitempty" json:"languages,omitempty"`
+	Version         int        `yaml:"version" json:"version"`
+	Profile         string     `yaml:"profile,omitempty" json:"profile,omitempty"`
+	Languages       []string   `yaml:"languages,omitempty" json:"languages,omitempty"`
+	GitHabitsPreset *GitHabits `yaml:"githabits,omitempty" json:"githabits,omitempty"`
 }
 
 // PreferencesPath returns the user configuration path, honoring GIT_BBQ_CONFIG
@@ -49,18 +51,34 @@ func LoadPreferences() (Preferences, error) {
 			return Preferences{}, err
 		}
 	}
+	if preferences.GitHabitsPreset != nil {
+		if err := validateGitHabitsPreset(preferences.GitHabitsPreset); err != nil {
+			return Preferences{}, err
+		}
+		if preferences.Profile == "" {
+			preferences.Profile = preferences.GitHabitsPreset.Profile
+		}
+	}
 	preferences.Languages = sortedLanguages(preferences.Languages)
 	return preferences, nil
 }
 
 // SavePreferences validates preferences and replaces the user configuration
-// through a temporary file. A supported policy profile is required.
+// through a temporary file. A supported profile or GitHabits preset is required.
 func SavePreferences(preferences Preferences) error {
 	if preferences.Version == 0 {
 		preferences.Version = 1
 	}
+	if preferences.GitHabitsPreset != nil {
+		if err := validateGitHabitsPreset(preferences.GitHabitsPreset); err != nil {
+			return err
+		}
+		if preferences.Profile == "" {
+			preferences.Profile = preferences.GitHabitsPreset.Profile
+		}
+	}
 	if preferences.Profile == "" {
-		return fmt.Errorf("Git BBQ preference profile is required")
+		return fmt.Errorf("Git BBQ preference profile or GitHabits preset is required")
 	}
 	if _, err := GitHabitsForProfile(preferences.Profile); err != nil {
 		return err
@@ -95,4 +113,23 @@ func SavePreferences(preferences Preferences) error {
 		return err
 	}
 	return os.Rename(temporaryName, path)
+}
+
+func validateGitHabitsPreset(preset *GitHabits) error {
+	if preset == nil {
+		return nil
+	}
+	if err := ValidateGitHabits(*preset); err != nil {
+		return fmt.Errorf("invalid GitHabits preset: %w", err)
+	}
+	data, err := marshalYAML(preset)
+	if err != nil {
+		return err
+	}
+	for lineNumber, line := range strings.Split(string(data), "\n") {
+		if kinds := secretKindsOnLine(line); len(kinds) > 0 {
+			return fmt.Errorf("credential-like value in GitHabits preset at line %d (%s)", lineNumber+1, kinds[0])
+		}
+	}
+	return nil
 }

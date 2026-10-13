@@ -16,6 +16,7 @@ func GenerateSchemas() (map[string][]byte, error) {
 		name  string
 		value any
 	}{
+		{name: "gitbbq-preferences.schema.json", value: Preferences{}},
 		{name: "gitbbq-manifest.schema.json", value: Manifest{}},
 		{name: "githabits.schema.json", value: GitHabits{}},
 		{name: "githabits-plan.schema.json", value: GitPlan{}},
@@ -27,6 +28,8 @@ func GenerateSchemas() (map[string][]byte, error) {
 		var schema *jsonschema.Schema
 		var err error
 		switch item.value.(type) {
+		case Preferences:
+			schema, err = jsonschema.For[Preferences](nil)
 		case Manifest:
 			schema, err = jsonschema.For[Manifest](nil)
 		case GitHabits:
