@@ -8,9 +8,11 @@ and implementation discussions.
 | **Upstream skill source** | The pinned `mattpocock/skills` Git repository recorded in the root curation manifest and `.agents/skills` submodule. |
 | **Curation manifest** | Git BBQ-owned metadata selecting which upstream skill directories enter the plugin package. It does not rewrite their names or instructions. |
 | **Skill projection** | A selected upstream skill directory copied into the plugin's immediate `skills/<name>/` discovery path. |
-| **Metadata adapter** | The narrow packaging step that maps Codex invocation policy into Agent Skills-compatible frontmatter while preserving the upstream policy. |
-| **Portable plugin manifest** | Root `plugin.json`, which declares plugin identity and portable package metadata. |
-| **Codex compatibility manifest** | `.codex-plugin/plugin.json`, which carries Codex-compatible metadata for hosts that use the fallback manifest. |
+| **Go core** | Git BBQ's Go CLI and `internal` packages, which remain the canonical project, ADR, validation, and Git-policy engine. |
+| **Hermes-native plugin** | A Python plugin declared by `plugin.yaml` and loaded through `register(ctx)`; it exposes tools and bundled skills through Hermes. |
+| **Hermes host adapter** | The plugin layer that maps typed Hermes tool calls to the bundled Go core without duplicating project or GitHub Issue behavior. |
+| **Remote-only issue operation** | A GitHub Issues action against configured `owner/repo` that does not require a local checkout. |
+| **Codex compatibility manifest** | Historical package metadata documented by ADRs 0001–0002; it is retired from the Hermes-only distribution. |
 | **Generated project context** | Git BBQ's existing `CONTEXT.md` and `CONTEXT-MAP.md` files created for scaffolded repositories. This format is separate from this repository's root glossary. |
 | **Language candidate** | A supported language proposed by read-only repository detection, together with the paths that support it. It is not selected project configuration until the user confirms it or an existing explicit selection applies. |
 | **Language evidence** | A recognized project marker or first-party source file used to propose a language candidate. Evidence is shown so users can assess ambiguous and polyglot repositories. |
