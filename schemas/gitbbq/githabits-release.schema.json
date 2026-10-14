@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "current_tag": {
+      "type": "string"
+    },
+    "bump": {
+      "type": "string"
+    },
+    "next_tag": {
+      "type": "string"
+    },
+    "commits_analyzed": {
+      "type": "integer"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "required": [
+    "schema_version",
+    "current_tag",
+    "bump",
+    "commits_analyzed",
+    "reason"
+  ],
+  "additionalProperties": false
+}

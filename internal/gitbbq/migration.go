@@ -407,18 +407,6 @@ func buildMigrationPlan(root string) (legacyMigrationPlan, error) {
 	} else if !os.IsNotExist(statErr) {
 		plan.assessment.Blockers = append(plan.assessment.Blockers, fmt.Sprintf("inspect %s: %v", OwnershipFilename, statErr))
 	}
-	if hookInfo, statErr := os.Lstat(filepath.Join(root, HookConfigPath)); statErr == nil {
-		if err := ensureArtifactParents(root, HookConfigPath); err != nil {
-			plan.assessment.Blockers = append(plan.assessment.Blockers, fmt.Sprintf("existing %s is unsafe", HookConfigPath))
-		}
-		if hookInfo.Mode()&os.ModeSymlink != 0 || !hookInfo.Mode().IsRegular() {
-			plan.assessment.Blockers = append(plan.assessment.Blockers, fmt.Sprintf("%s is not a regular file", HookConfigPath))
-		} else if _, err := ReadHookConfig(root); err != nil {
-			plan.assessment.Blockers = append(plan.assessment.Blockers, fmt.Sprintf("existing %s is invalid: %v", HookConfigPath, err))
-		}
-	} else if !os.IsNotExist(statErr) {
-		plan.assessment.Blockers = append(plan.assessment.Blockers, fmt.Sprintf("inspect %s: %v", HookConfigPath, statErr))
-	}
 	expectedDependency := DefaultManifest(filepath.Base(root)).Matt
 	if _, statErr := os.Lstat(filepath.Join(root, MattDependencyMetadataPath)); statErr == nil {
 		if err := ensureArtifactParents(root, MattDependencyMetadataPath); err != nil {

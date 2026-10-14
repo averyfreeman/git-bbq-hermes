@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 )
 
-// ValidateProject checks required project files, configuration, lifecycle
-// hooks, generated architecture projections, ownership metadata, and bounded
+// ValidateProject checks required project files, configuration, generated
+// architecture projections, ownership metadata, and bounded
 // secret scanning for architecture artifacts. It returns the first validation
 // or filesystem error encountered.
 func ValidateProject(root string) error {
@@ -29,9 +29,6 @@ func validateProject(root string, checkProjections bool) error {
 	}
 	if _, err := os.Stat(filepath.Join(root, ContextFilename)); err != nil {
 		return fmt.Errorf("missing %s: %w", ContextFilename, err)
-	}
-	if _, err := ReadHookConfig(root); err != nil {
-		return err
 	}
 	if _, err := os.Stat(filepath.Join(root, MattDependencyMetadataPath)); err != nil {
 		return fmt.Errorf("missing %s: %w", MattDependencyMetadataPath, err)

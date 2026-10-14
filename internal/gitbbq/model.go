@@ -10,8 +10,6 @@ import (
 const (
 	// ToolName is the executable name used by Git BBQ.
 	ToolName = "git-bbq"
-	// ToolVersion is the current Git BBQ CLI version.
-	ToolVersion = "0.4.1"
 	// SchemaVersion is the version shared by Git BBQ project contracts.
 	SchemaVersion = "1.0.0"
 	// ManifestFilename is the project-relative path of the Git BBQ manifest.
@@ -30,8 +28,6 @@ const (
 	ContractFilename = "architecture-contract.yaml"
 	// ImplementationPlanFilename is the generated implementation plan projection.
 	ImplementationPlanFilename = "implementation-plan.md"
-	// HookConfigPath is the path of the generated lifecycle hook configuration.
-	HookConfigPath = ".gitbbq/hooks.json"
 	// SessionPath is the path of Git BBQ's per-project operational session state.
 	SessionPath = ".gitbbq/session.json"
 	// SessionIgnorePath is the path of the ignore rule for per-project session state.
@@ -48,6 +44,9 @@ const (
 	MattCommit = "b0618bc436ad893b3c5e84e55fba86586d34a404"
 )
 
+// ToolVersion is set by the release builder when compiling the Go runtime.
+var ToolVersion = "0.1.0"
+
 // SupportedLanguages lists the canonical profile identifiers accepted by Git BBQ.
 var SupportedLanguages = []string{"go", "python", "typescript", "javascript", "rust", "java", "csharp"}
 
@@ -58,7 +57,7 @@ type MattDependency struct {
 	Path       string `yaml:"path" json:"path"`
 }
 
-// HookSettings records whether lifecycle hooks are enabled and which events are required.
+// HookSettings preserves the legacy hook metadata when reading old manifests.
 type HookSettings struct {
 	Enabled  bool     `yaml:"enabled" json:"enabled"`
 	Required []string `yaml:"required" json:"required"`
@@ -72,7 +71,7 @@ type Manifest struct {
 	Problem       string         `yaml:"problem" json:"problem"`
 	Languages     []string       `yaml:"languages" json:"languages"`
 	Matt          MattDependency `yaml:"matt" json:"matt"`
-	Hooks         HookSettings   `yaml:"hooks" json:"hooks"`
+	Hooks         HookSettings   `yaml:"hooks,omitempty" json:"hooks,omitempty"`
 }
 
 // RemoteConfig records the configured Git remote provider and its lifecycle state.
@@ -166,7 +165,7 @@ const (
 )
 
 // DefaultManifest returns a new project manifest with the supplied name and
-// the current upstream dependency and required hook defaults.
+// the current upstream dependency.
 func DefaultManifest(projectName string) Manifest {
 	return Manifest{
 		SchemaVersion: SchemaVersion,
@@ -178,7 +177,6 @@ func DefaultManifest(projectName string) Manifest {
 			Commit:     MattCommit,
 			Path:       MattDependencyPath,
 		},
-		Hooks: HookSettings{Enabled: true, Required: append([]string(nil), RequiredHookEvents...)},
 	}
 }
 
@@ -275,8 +273,8 @@ func (config GitHabits) Allows(action GitAction) bool {
 	}
 }
 
-// ValidateManifest checks required project metadata, supported languages,
-// dependency fields, and the required lifecycle hook policy.
+// ValidateManifest checks required project metadata, supported languages, and
+// dependency fields. Legacy hook metadata is accepted but no longer required or executed.
 func ValidateManifest(manifest Manifest) error {
 	if manifest.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("unsupported manifest schema_version %q", manifest.SchemaVersion)
@@ -295,12 +293,6 @@ func ValidateManifest(manifest Manifest) error {
 	}
 	if manifest.Matt.Repository == "" || manifest.Matt.Commit == "" || manifest.Matt.Path == "" {
 		return fmt.Errorf("manifest Matt dependency must include repository, commit, and path")
-	}
-	if !sameStrings(manifest.Hooks.Required, RequiredHookEvents) {
-		return fmt.Errorf("manifest must require all five lifecycle hooks")
-	}
-	if !manifest.Hooks.Enabled {
-		return fmt.Errorf("manifest hooks must remain enabled")
 	}
 	return nil
 }
@@ -508,7 +500,6 @@ func projectPaths(root string) []string {
 		"AGENTS.md",
 		MattDependencyMetadataPath,
 		".agents/skills/githabits/SKILL.md",
-		HookConfigPath,
 		SessionPath,
 		OwnershipFilename,
 		ContractFilename,

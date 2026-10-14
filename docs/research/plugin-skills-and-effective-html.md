@@ -1,5 +1,10 @@
 # Git BBQ skills, ticket workflows, and Effective HTML findings
 
+> Historical snapshot: this research predates the Hermes-only migration in
+> [ADR 0003](../adr/0003-hermes-native-plugin-boundary.md). Its Codex package
+> results and links to the retired builder describe the former implementation,
+> not the current release process.
+
 **Inspection basis:** Git BBQ worktree on 2026-10-08; `.agents/skills` is pinned to upstream Matt Pocock `b0618bc436ad893b3c5e84e55fba86586d34a404`. Effective HTML is reviewed at `2ac1dfecb0f2474e75260cb6d3c9b9d6d9b5062e`. A fresh four-target package build, Git BBQ package validation, Agent Skills reference validation for all 27 projected skills, portable plugin schema validation, and isolated Codex plugin installation have passed. In the isolated Codex home, setup, triage, research, architecture review, to-spec, and to-tickets were invoked against a disposable fixture. The research agent launch and architecture report open commands hit environment limitations; the workflows recorded fallbacks, and the architecture report was queued in the Codex panel. The GitHub issue queue was empty during triage, so no triage dispositions were needed. The spec and ordered implementation tickets were then published as [parent #1](https://github.com/averyfreeman/Git-BBQ/issues/1) and [children #2–#6](https://github.com/averyfreeman/Git-BBQ/issues/1).
 
 ## Source-to-package coupling and conformance

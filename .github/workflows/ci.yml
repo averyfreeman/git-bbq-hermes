@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: ["**"]
 
 permissions:
   contents: read
@@ -32,7 +32,7 @@ jobs:
 
   plugin:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,14 +41,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Test curation manifest parser
-        run: PYTHONPATH=scripts python3 -m unittest scripts/test_build_git_bbq_plugin.py
-      - name: Build Linux plugin package
-        run: python3 scripts/build_git_bbq_plugin.py --output .tmp/git-bbq-plugin --target x86_64-linux --force
-      - name: Validate plugin package
-        run: python3 scripts/validate_git_bbq_plugin.py .tmp/git-bbq-plugin --target x86_64-linux
-      - name: Verify packaged hooks and runtime
-        run: |
-          test -x .tmp/git-bbq-plugin/runtime/git-bbq/git-bbq
-          test -x .tmp/git-bbq-plugin/runtime/bin/x86_64-linux/git-bbq
-          test "$(python3 -c 'import json; print(len(json.load(open(".tmp/git-bbq-plugin/hooks/hooks.json"))["hooks"]))')" = "5"
+      - name: Test native Hermes plugin and builder
+        run: python3 -m unittest scripts.test_hermes_plugin scripts.test_hermes_builder -v
+      - name: Install Hermes CLI for package validation
+        run: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive --skip-browser --skip-computer-use
+      - name: Build Linux Hermes plugin package
+        run: python3 scripts/build_hermes_plugin.py --output .tmp/git-bbq-hermes --target x86_64-linux --force
+      - name: Diagnose Hermes plugin package
+        run: hermes plugins doctor --ci .tmp/git-bbq-hermes
+      - name: Validate Hermes plugin package
+        run: hermes plugins validate --json .tmp/git-bbq-hermes

@@ -16,6 +16,21 @@
         "type": "string"
       }
     },
+    "follow_up_commands": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "string"
+        }
+      }
+    },
     "executed": {
       "type": "boolean"
     },

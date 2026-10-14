@@ -1,10 +1,12 @@
-# Git BBQ support
+# Git-BBQ support
 
-Report reproducible defects, packaging failures, and documentation issues in
-the repository's GitHub issue tracker:
+Report reproducible defects, package failures, and documentation issues in the
+GitHub issue tracker:
 
-https://github.com/averyfreeman/git-bbq/issues
+https://github.com/averyfreeman/git-bbq-hermes/issues
 
-Include the Git BBQ version, host (Codex CLI or ChatGPT desktop), operating
-system, target package, command, and a redacted error payload. Do not include
-secrets or private repository contents.
+Include the Git-BBQ version, Hermes version and surface, operating system,
+runtime target, command, and a redacted error message. For GitHub Issues
+operations, note whether the target came from the selected workspace or an
+explicit owner/repository. Do not include credentials, tokens, or private
+repository contents.

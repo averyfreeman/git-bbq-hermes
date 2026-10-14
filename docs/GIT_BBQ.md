@@ -6,9 +6,9 @@ architecture skills. The division of responsibility is intentionally narrow:
 - Matt skills own domain language, architecture reasoning, and the canonical ADR
   and context conventions.
 - Git BBQ owns project bootstrap, language-specific agent skills, Git policy,
-  deterministic projections, validation, and Codex lifecycle hooks.
-- Codex remains the host-native reasoning runtime; Git BBQ does not call another
-  model or replace Matt's semantic interview.
+  deterministic projections, validation, and its Hermes-native adapter.
+- Hermes remains the reasoning runtime; Git BBQ does not call another model or
+  replace Matt's semantic interview.
 
 ## Project contract
 
@@ -21,8 +21,8 @@ project contains:
 | `CONTEXT-MAP.md` | Root context map for future context-specific vocabulary |
 | `docs/adr/NNNN-slug.md` | The only architectural decision source of truth |
 | `.githabits.yaml` | Granular policy for init, branch, stage, commit, tag, remote, and push |
-| `.gitbbq-manifest.yaml` | Project problem, languages, pinned Matt dependency, and hooks |
-| `AGENTS.md` | Thin Codex agent router |
+| `.gitbbq-manifest.yaml` | Project problem, languages, and pinned Matt dependency |
+| `AGENTS.md` | Thin project agent router |
 | `.agents/skills/` | Githabits plus selected language skills |
 | `.agents/mattpocock/DEPENDENCY.yaml` | Upstream Matt Pocock skills repository and commit pin |
 | `architecture-contract.yaml` | Generated contract projection |
@@ -113,10 +113,14 @@ git-bbq githabits execute --approve --action push --branch main --json
 ```
 
 Plans render argument-separated Git commands and report whether `.githabits.yaml`
-authorizes the action. They never execute Git, and every plan still requires
-host-level approval. `execute --approve` revalidates the plan, invokes Git without
-a shell, applies a bounded timeout, and rejects tampered commands and force
-flags. Remote planning reads `remote.alias` and `remote.url` from a pending
+authorizes the action. When `push.after_commit` or `push.after_tag` is enabled,
+commit and tag plans include their required branch or tag push as an ordered
+follow-up; planning fails closed until the push action and configured remote are
+available. They never execute Git, and every plan still requires host-level
+approval. `execute --approve` revalidates the plan, invokes Git without a shell,
+applies a bounded timeout, and rejects tampered commands and force flags. A
+failed follow-up push reports that the commit or tag already succeeded. Remote
+planning reads `remote.alias` and `remote.url` from a pending
 `.githabits.yaml` configuration and emits only `git remote add`. After that
 approved command succeeds, the CLI persists `remote.status: configured`; a
 failed command leaves the status pending. Push planning emits a command only
@@ -126,43 +130,46 @@ messages without a recognized commit type. SemVer profiles require tags in the
 `vMAJOR.MINOR.PATCH` form, with optional prerelease and build metadata.
 Agents can pass repeated `--existing-tag` values from their read-only tag
 inventory; planning rejects duplicate or older release tags.
+The initial-baseline workflow is deliberately separate: it preserves all
+published remote tags, removes only tags proven to be upstream-imported and
+absent from `origin`, and creates the configured initial tag without rewriting
+any remote ref. It fails if that exact initial tag already exists locally or on
+the configured remote. Use `githabits release --since <initial-tag>` when the
+new repository's release history begins at that baseline.
 `--provision-remote` is a separate approval-gated GitHub CLI plan using
 `gh repo create --source . --remote <alias>`; it never includes `--push`.
 
-## Codex integration
+## Hermes integration
 
 The plugin package is built from the same Go CLI:
 
 ```sh
-python3 scripts/build_git_bbq_plugin.py --output plugins/git-bbq --variant local --target all --force
-python3 scripts/validate_git_bbq_plugin.py plugins/git-bbq --variant local --target all
+python3 scripts/build_hermes_plugin.py \
+  --output .tmp/git-bbq-hermes \
+  --target x86_64-linux \
+  --force
+hermes plugins doctor --ci .tmp/git-bbq-hermes
+hermes plugins validate --json .tmp/git-bbq-hermes
 ```
 
-The package exposes the structured `Git BBQ` identity and direct `$git-bbq`
-skill through a portable root `plugin.json` plus a Codex compatibility
-manifest. It includes selected stable upstream skills under their original
-names. It installs exactly five required hooks: `UserPromptSubmit`,
-`PreToolUse`, `PostToolUse`, `PostCompact`, and `Stop`. The runtime accepts one
-JSON event on standard input and fails closed when the current workspace lacks a
-valid Git BBQ manifest or hook configuration.
+`plugins/git-bbq/plugin.yaml` declares the native plugin and its typed tool
+surface. `__init__.py`, `tools.py`, and `schemas.py` register the shared slash
+command, tools, and bundled skills; tool handlers delegate to the packaged Go
+runtime. They do not reimplement Go business logic. The builder includes only
+the selected upstream skills, their license, and the requested runtime target;
+it does not create portable Agent Plugin manifests or lifecycle hook files.
 
-Lifecycle hooks are package-defined and host-trusted. After installation, use
-`/hooks` in Codex CLI to review and trust the current definition; changing the
-hook definition requires another review. `git-bbq help hooks` documents the
-runtime syntax but cannot grant host-level trust.
+Local filesystem and Git operations require a selected workspace and do not
+auto-clone a repository. Remote GitHub Issues operations require an explicit
+owner/repository target when no local checkout is selected. Mutating plugin
+tools are protected by Hermes's host-level `pre_tool_call` approval gate; the
+adapter passes the Go CLI's `--approve` flag only after approval. See
+`docs/LOCAL_PLUGIN.md` for local build and installation guidance and
+`docs/PLUGIN_SUBMISSION.md` for Hermes catalog preparation.
 
-The repository marketplace at `.agents/plugins/marketplace.json` is named
-`git-bbq-local`. Add it with `codex plugin marketplace add .`, install
-`git-bbq@git-bbq-local`, restart the Codex host, review the bundled hooks with
-`/hooks`, and test in a new thread. Git BBQ uses a skills-only marketplace shape
-and does not require an MCP server.
-
-The builder also accepts `--variant public`, which omits lifecycle hook files,
-the OpenAI hook setting, and hook-specific instructions from the Git BBQ skill.
-It retains the curated skills and Go CLI runtime for local Codex execution.
-ChatGPT web installs receive the skills but cannot access a user's local
-repository or run the packaged local CLI without a remote integration. See
-`docs/PLUGIN_SUBMISSION.md` for current submission constraints.
+The first release targets the shared tools and skills that Hermes can expose
+across its agent surfaces. Specialized Desktop panes and TUI widgets are
+deferred; no host-specific UI integration is required to use the shared plugin.
 
 Generate public contract schemas with:
 

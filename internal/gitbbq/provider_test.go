@@ -2,7 +2,6 @@ package gitbbq
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -14,8 +13,12 @@ func TestPlanRemoteProvisionRequiresExplicitVisibility(t *testing.T) {
 	config.Remote.Owner = "averyfreeman"
 	config.Remote.Name = "example-project"
 
-	if _, err := PlanRemoteProvision(config); err == nil || !strings.Contains(err.Error(), "visibility") {
-		t.Fatalf("unspecified remote visibility error = %v", err)
+	plan, err := PlanRemoteProvision(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.NeedsInput || !reflect.DeepEqual(plan.RequiredInputs, []string{"remote.visibility"}) || len(plan.Command) != 0 {
+		t.Fatalf("unspecified remote visibility was not returned as a resolvable requirement: %#v", plan)
 	}
 }
 

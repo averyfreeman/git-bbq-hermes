@@ -14,7 +14,6 @@ htmlcov/
 .test-tmp/
 .tmp/
 /git-bbq
-/plugins/git-bbq/
 evaluation-data/*.lock
 evaluation-data/.exploratory-runs.jsonl.*.tmp
 pytest-cache-files-*/
@@ -22,3 +21,9 @@ pytest-cache-files-*/
 # Runtime artifacts created while exercising bundled demo projects.
 /demo/**/.gitbbq/
 .env*
+!.env.example
+.DS_Store
+coverage.out
+*.test
+credentials*.json
+service-account*.json

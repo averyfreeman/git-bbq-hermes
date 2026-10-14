@@ -13,6 +13,18 @@
     "requires_approval": {
       "type": "boolean"
     },
+    "needs_input": {
+      "type": "boolean"
+    },
+    "required_inputs": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "reason": {
       "type": "string"
     },
@@ -23,6 +35,21 @@
       ],
       "items": {
         "type": "string"
+      }
+    },
+    "follow_up_commands": {
+      "type": [
+        "null",
+        "array"
+      ],
+      "items": {
+        "type": [
+          "null",
+          "array"
+        ],
+        "items": {
+          "type": "string"
+        }
       }
     }
   },

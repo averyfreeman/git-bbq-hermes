@@ -6,7 +6,7 @@
 // inputs; generated indexes and plans are projections of those sources.
 //
 // The package also exposes planning and execution seams for policy-controlled
-// Git actions, lifecycle hook responses, language detection, preferences, and
+// Git actions, language detection, preferences, and
 // migration from the legacy AI Software Architect format. It does not invoke
 // a language model or implement application code for a scaffolded project.
 package gitbbq

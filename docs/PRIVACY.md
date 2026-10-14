@@ -1,15 +1,21 @@
-# Git BBQ privacy notice
+# Git-BBQ privacy notice
 
-Git BBQ is a local repository tool and Codex plugin. It does not operate a
-telemetry service, sell personal information, or send repository contents to a
-Git BBQ-operated service.
+Git-BBQ is a local Go CLI and Hermes plugin. It does not operate a telemetry
+service or send repository contents to a Git-BBQ-operated service.
 
-The Codex host controls prompts, workspace access, and any network activity
-performed by the host. A package build may fetch the pinned Git BBQ-maintained
-upstream Matt Pocock skills repository so selected skills can be included in
-the local artifact.
-Runtime hooks
-read only the event payload and workspace files needed to validate the Git BBQ
-project contract.
+The Hermes adapter runs the bundled Go executable in the selected workspace.
+Project scaffolding, validation, and Git operations read or write local files
+only as described by the command and policy. Mutating operations require explicit
+approval.
 
-Questions about this notice can be opened as a GitHub issue in the repository.
+When GitHub Issues tools are used, Git-BBQ invokes the authenticated `gh` CLI
+and sends the requested issue data and operation to GitHub. Authentication is
+owned by `gh` or the active Hermes profile's environment. Repository contents
+are not uploaded except for text the user explicitly submits as issue content.
+
+Building a package may read the pinned Matt Pocock skills submodule and copies
+selected upstream skills into the package. The build does not contact a
+Git-BBQ-operated service.
+
+Questions about this notice can be opened as a GitHub issue in this repository:
+https://github.com/averyfreeman/git-bbq-hermes/issues

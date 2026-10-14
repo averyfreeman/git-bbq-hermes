@@ -72,8 +72,7 @@
     "project_name",
     "problem",
     "languages",
-    "matt",
-    "hooks"
+    "matt"
   ],
   "additionalProperties": false
 }

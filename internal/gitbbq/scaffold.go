@@ -92,14 +92,6 @@ func ScaffoldProject(root string, options ScaffoldOptions) (ScaffoldResult, erro
 	if err := write(GitHabitsFilename, gitData); err != nil {
 		return ScaffoldResult{}, err
 	}
-	hooks, err := json.MarshalIndent(DefaultHookConfig(), "", "  ")
-	if err != nil {
-		return ScaffoldResult{}, err
-	}
-	hooks = append(hooks, '\n')
-	if err := write(HookConfigPath, hooks); err != nil {
-		return ScaffoldResult{}, err
-	}
 	if err := write("AGENTS.md", []byte(renderAgents(languages))); err != nil {
 		return ScaffoldResult{}, err
 	}

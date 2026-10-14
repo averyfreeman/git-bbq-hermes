@@ -10,12 +10,13 @@ and architecture decisions, gives agents language-specific project guidance, and
 makes Git permissions explicit. The grill catches vague requirements; the
 repository should remember what the team decided.
 
-Git BBQ is a Go CLI and a Codex plugin. It does not call a model or write your
-application. Your host agent does the reasoning and implementation. Git BBQ
-keeps the project brief, decisions, generated architecture views, validation,
-and approved Git operations organized around that work. It will not build your
-storefront, but it can help keep checkout decisions from disappearing into the
-chat scrollback.
+Git BBQ is a Go CLI with a native Hermes plugin. It does not call a model or
+write your application. Hermes does the reasoning and implementation; the
+plugin exposes typed tools and skills backed by the canonical Go engine. Git
+BBQ keeps the project brief, decisions, generated architecture views,
+validation, and approved Git operations organized around that work. It will not
+build your storefront, but it can help keep checkout decisions from disappearing
+into the chat scrollback.
 
 ## Quick start: a Next.js store
 
@@ -61,7 +62,6 @@ storefront/
 │       └── typescript/SKILL.md
 ├── .gitbbq/
 │   ├── .gitignore
-│   ├── hooks.json
 │   ├── ownership.json
 │   └── session.json
 ├── .gitbbq-manifest.yaml
@@ -78,7 +78,7 @@ storefront/
 
 `CONTEXT.md`, `CONTEXT-MAP.md`, and `docs/adr/` hold the project's durable
 context and decisions. `.gitbbq-manifest.yaml` records the project problem,
-language selection, Matt dependency, and hook requirements. `AGENTS.md` routes
+language selection, and Matt dependency. `AGENTS.md` routes
 an agent to those instructions. The architecture contract, implementation
 plan, and ADR index are generated projections, so there is one decision history
 to maintain. `.githabits.yaml` describes the Git actions the project allows.
@@ -106,8 +106,8 @@ when you want the CLI to propose a language set for review.
 
 ### Validation and architecture projections
 
-`git-bbq validate` checks the project manifest, ADRs, hook policy, and generated
-architecture projections. It reports projection drift and scans bounded
+`git-bbq validate` checks the project manifest, ADRs, and generated architecture
+projections. It reports projection drift and scans bounded
 architecture and Git-policy files for secret-like values. Findings identify a
 file, line, and finding type without printing the detected value.
 
@@ -157,61 +157,47 @@ The `autonomous` profile enables individual action switches, but execution
 still requires explicit approval. Git BBQ does not force-push or rewrite shared
 history.
 
-## Codex plugin
+## Hermes plugin
 
-The local plugin package includes the portable manifest, Codex compatibility
-manifest, curated skills, Go CLI runtimes, launchers, and five lifecycle hooks:
-`UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostCompact`, and `Stop`.
-Hooks run only through the local Codex host. Review and trust them with `/hooks`
-after installation.
+The native plugin registers typed tools, a shared slash command, and bundled
+skills. The tools delegate to the Go CLI rather than reimplementing its project,
+GitHabits, release, baseline, or GitHub Issues behavior. Local file and Git
+operations stay inside the explicitly selected workspace; Hermes's host-level
+`pre_tool_call` approval gate protects mutations, and the adapter passes the
+Go CLI's `--approve` flag only after approval. See the
+[local Hermes plugin guide](docs/LOCAL_PLUGIN.md) for build, validation, and
+installation instructions.
 
-Build and validate the local package:
+Build a package for the current platform or select a release target:
 
 ```sh
-python3 scripts/build_git_bbq_plugin.py \
-  --output plugins/git-bbq \
-  --variant local \
-  --target all \
+python3 scripts/build_hermes_plugin.py \
+  --output .tmp/git-bbq-hermes \
+  --target x86_64-linux \
   --force
-python3 scripts/validate_git_bbq_plugin.py plugins/git-bbq --variant local --target all
+hermes plugins doctor --ci .tmp/git-bbq-hermes
+hermes plugins validate --json .tmp/git-bbq-hermes
 ```
 
-The builder pins the curated engineering and productivity skills to the exact
-upstream commit recorded by the `.agents/skills` submodule. Curation belongs to
-Git BBQ; upstream skill instructions and support files remain upstream content.
-
-Build the hook-free, public-oriented package for submission preflight with
-`--variant public`. It retains the selected skills and local CLI runtime, but
-cannot give a ChatGPT web install access to the user's repository or execute a
-local CLI. A hook-free build addresses the hook packaging constraint; it does
-not guarantee marketplace acceptance. Read the
-[plugin submission guide](docs/PLUGIN_SUBMISSION.md) before preparing a public
-submission.
-
-To install this repository's local marketplace in Codex:
-
-```sh
-codex plugin marketplace add .
-codex plugin add git-bbq@git-bbq-local
-codex plugin list
-```
-
-Restart the Codex host after rebuilding a package, then review the hook
-configuration in a new thread. See the
-[local plugin guide](docs/LOCAL_PLUGIN.md) for installation and troubleshooting.
+The builder pins selected engineering and productivity skills to the exact
+upstream commit recorded by `git-bbq-curation.json` and the `.agents/skills`
+submodule. Git BBQ owns the selection; upstream skill instructions and support
+files remain upstream content. The first release targets shared tools and
+skills across Hermes surfaces; specialized Desktop panes and TUI widgets are
+deferred.
 
 ## Development
 
-The CLI and project behavior live in `cmd/git-bbq` and `internal/gitbbq`.
-Portable plugin packaging and Codex-specific integration live under
-`adapters/codex` and `scripts/`.
+The Go CLI and canonical project behavior live in `cmd/git-bbq` and
+`internal/gitbbq`. The Hermes adapter lives in `plugins/git-bbq`; packaging and
+contract tests live in `scripts/`.
 
 ```sh
 test -z "$(gofmt -l cmd internal)"
 go test ./...
 go vet ./...
 go build ./cmd/git-bbq
-PYTHONPATH=scripts python3 -m unittest scripts/test_build_git_bbq_plugin.py
+python3 -m unittest scripts.test_hermes_plugin scripts.test_hermes_builder -v
 go run ./cmd/git-bbq schema .
 ```
 
@@ -229,7 +215,7 @@ place unless the user approves an operation that changes them.
 ## Documentation
 
 - [Project behavior and file contracts](docs/GIT_BBQ.md)
-- [Local Codex installation](docs/LOCAL_PLUGIN.md)
+- [Local Hermes plugin installation](docs/LOCAL_PLUGIN.md)
 - [Development and packaging](docs/DEVELOPMENT.md)
 - [Legacy project migration](docs/agents/legacy-migration.md)
-- [Public plugin submission preflight](docs/PLUGIN_SUBMISSION.md)
+- [Hermes plugin catalog submission](docs/PLUGIN_SUBMISSION.md)

@@ -1,0 +1,39 @@
+name: git-bbq
+version: 0.1.0
+manifest_version: 2
+api_version: 1
+description: Hermes-native software development workflows backed by the Git-BBQ Go core
+author: Git-BBQ
+license: MIT
+homepage: https://github.com/averyfreeman/git-bbq-hermes
+tags:
+  - development
+  - git
+  - architecture
+provides_tools:
+  - git_bbq_assess
+  - git_bbq_init
+  - git_bbq_validate
+  - git_bbq_project
+  - git_bbq_adr_new
+  - git_bbq_adr_index
+  - git_bbq_migrate
+  - git_bbq_githabits
+  - git_bbq_git_plan
+  - git_bbq_git_execute
+  - git_bbq_release_plan
+  - git_bbq_baseline_plan
+  - git_bbq_baseline_execute
+  - git_bbq_issues_list
+  - git_bbq_issue_get
+  - git_bbq_issue_create
+  - git_bbq_issue_edit
+  - git_bbq_issue_labels
+  - git_bbq_issue_assign
+  - git_bbq_issue_comment
+  - git_bbq_issue_close
+  - git_bbq_issue_reopen
+  - git_bbq_issue_subissue
+  - git_bbq_issue_block
+provides_hooks:
+  - pre_tool_call

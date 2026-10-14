@@ -10,6 +10,8 @@ func TestPlanGitActionBuildsApprovedCommitCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	config.Remote.Status = "configured"
+	config.Remote.URL = "https://github.com/example/project.git"
 
 	plan, err := PlanGitAction(config, GitActionCommit, GitPlanRequest{
 		Message: "feat: add scaffold",
@@ -25,6 +27,48 @@ func TestPlanGitActionBuildsApprovedCommitCommand(t *testing.T) {
 	}
 	if want := []string{"git", "commit", "-m", "feat: add scaffold"}; !reflect.DeepEqual(plan.Command, want) {
 		t.Fatalf("command = %#v, want %#v", plan.Command, want)
+	}
+	if want := [][]string{{"git", "push", "origin", "HEAD"}}; !reflect.DeepEqual(plan.FollowUpCommands, want) {
+		t.Fatalf("follow-up commands = %#v, want %#v", plan.FollowUpCommands, want)
+	}
+}
+
+func TestPlanGitActionAcceptsBreakingCommitWithCustomType(t *testing.T) {
+	config, err := GitHabitsForProfile("autonomous")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PlanGitAction(config, GitActionCommit, GitPlanRequest{Message: "security!: rotate exposed credentials"}); err != nil {
+		t.Fatalf("valid custom breaking commit type was rejected: %v", err)
+	}
+}
+
+func TestPlanGitActionRequiresConfiguredRemoteForCommitPushCadence(t *testing.T) {
+	config, err := GitHabitsForProfile("autonomous")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := PlanGitAction(config, GitActionCommit, GitPlanRequest{Message: "feat: add scaffold"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Allowed || !plan.NeedsInput || !reflect.DeepEqual(plan.RequiredInputs, []string{"remote"}) || len(plan.Command) != 0 {
+		t.Fatalf("commit plan did not fail closed until the configured push target exists: %#v", plan)
+	}
+}
+
+func TestDeniedCommitDoesNotRequestRemoteConfiguration(t *testing.T) {
+	config, err := GitHabitsForProfile("guided")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := PlanGitAction(config, GitActionCommit, GitPlanRequest{Message: "feat: add scaffold"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Allowed || plan.NeedsInput || len(plan.RequiredInputs) != 0 || len(plan.Command) != 0 {
+		t.Fatalf("denied commit should not request unrelated remote input: %#v", plan)
 	}
 }
 
@@ -66,6 +110,8 @@ func TestPlanGitActionBuildsAnnotatedTagCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	config.Remote.Status = "configured"
+	config.Remote.URL = "https://github.com/example/project.git"
 
 	plan, err := PlanGitAction(config, GitActionTag, GitPlanRequest{Tag: "v0.1.1"})
 	if err != nil {
@@ -76,6 +122,9 @@ func TestPlanGitActionBuildsAnnotatedTagCommand(t *testing.T) {
 	}
 	if want := []string{"git", "tag", "-a", "v0.1.1", "-m", "v0.1.1"}; !reflect.DeepEqual(plan.Command, want) {
 		t.Fatalf("command = %#v, want %#v", plan.Command, want)
+	}
+	if want := [][]string{{"git", "push", "origin", "refs/tags/v0.1.1"}}; !reflect.DeepEqual(plan.FollowUpCommands, want) {
+		t.Fatalf("follow-up commands = %#v, want %#v", plan.FollowUpCommands, want)
 	}
 }
 
@@ -95,6 +144,8 @@ func TestPlanGitActionAcceptsGitBBQ030Tag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	config.Remote.Status = "configured"
+	config.Remote.URL = "https://github.com/example/project.git"
 
 	plan, err := PlanGitAction(config, GitActionTag, GitPlanRequest{
 		Tag:          "v0.3.0",
@@ -139,6 +190,52 @@ func TestPlanGitActionBuildsPushCommandForConfiguredRemote(t *testing.T) {
 	}
 	if want := []string{"git", "push", "origin", "main"}; !reflect.DeepEqual(plan.Command, want) {
 		t.Fatalf("command = %#v, want %#v", plan.Command, want)
+	}
+}
+
+func TestPlanGitActionPushesCurrentBranchWhenPolicyTargetsCurrent(t *testing.T) {
+	config, err := GitHabitsForProfile("autonomous")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Remote.Status = "configured"
+	config.Remote.URL = "https://github.com/example/project.git"
+
+	plan, err := PlanGitAction(config, GitActionPush, GitPlanRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"git", "push", "origin", "HEAD"}; !reflect.DeepEqual(plan.Command, want) {
+		t.Fatalf("command = %#v, want %#v", plan.Command, want)
+	}
+}
+
+func TestPlanGitActionPushesSemverTagWithoutPushingBranch(t *testing.T) {
+	config, err := GitHabitsForProfile("autonomous")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Remote.Status = "configured"
+	config.Remote.URL = "https://github.com/example/project.git"
+
+	plan, err := PlanGitAction(config, GitActionPush, GitPlanRequest{Tag: "v0.1.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"git", "push", "origin", "refs/tags/v0.1.0"}; !reflect.DeepEqual(plan.Command, want) {
+		t.Fatalf("command = %#v, want %#v", plan.Command, want)
+	}
+}
+
+func TestPlanGitActionRejectsAmbiguousPushTarget(t *testing.T) {
+	config, err := GitHabitsForProfile("autonomous")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Remote.Status = "configured"
+	config.Remote.URL = "https://github.com/example/project.git"
+	if _, err := PlanGitAction(config, GitActionPush, GitPlanRequest{Branch: "main", Tag: "v0.1.0"}); err == nil {
+		t.Fatal("push plan accepted both branch and tag targets")
 	}
 }
 
@@ -232,5 +329,27 @@ func TestPlanGitActionRejectsCredentialBearingRemoteURL(t *testing.T) {
 
 	if _, err := PlanGitAction(config, GitActionRemote, GitPlanRequest{}); err == nil {
 		t.Fatal("credential-bearing remote URL was accepted")
+	}
+}
+
+func TestSafeGitRemoteURLRejectsMalformedAndCredentialBearingURLs(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{name: "https remote", value: "https://github.com/example/project.git", want: true},
+		{name: "scp remote", value: "git@github.com:example/project.git", want: true},
+		{name: "malformed escape", value: "https://github.com/example/%zz"},
+		{name: "query credential", value: "https://github.com/example/project.git?access_token=secret"},
+		{name: "fragment credential", value: "https://github.com/example/project.git#token=secret"},
+		{name: "arbitrary query", value: "https://github.com/example/project.git?mirror=1"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := safeGitRemoteURL(testCase.value); got != testCase.want {
+				t.Fatalf("safeGitRemoteURL returned %t, want %t", got, testCase.want)
+			}
+		})
 	}
 }

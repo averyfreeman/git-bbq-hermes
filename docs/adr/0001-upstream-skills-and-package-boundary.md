@@ -1,6 +1,6 @@
 # Use upstream Matt Pocock skills as the plugin source
 
-**Status:** Accepted
+**Status:** Superseded by [ADR 0003](./0003-hermes-native-plugin-boundary.md)
 
 ## Context
 

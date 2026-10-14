@@ -1,80 +1,118 @@
-# Local Codex plugin installation
+# Local Hermes plugin build and installation
 
-Build a local multi-platform package from the repository root:
+Build the Hermes-native package from the repository root. The builder compiles
+the canonical Go CLI for the selected platform and includes it under the
+package's `runtime/bin/` directory.
 
-~~~sh
-python3 scripts/build_git_bbq_plugin.py \
-  --output plugins/git-bbq \
-  --variant local \
-  --target all \
+```sh
+python3 scripts/build_hermes_plugin.py \
+  --output .tmp/git-bbq-hermes \
+  --target x86_64-linux \
   --force
-python3 scripts/validate_git_bbq_plugin.py plugins/git-bbq --variant local --target all
-~~~
 
-Register and install the repository marketplace:
+hermes plugins doctor --ci .tmp/git-bbq-hermes
+hermes plugins validate --json .tmp/git-bbq-hermes
+```
 
-~~~sh
-codex plugin marketplace add .
-codex plugin add git-bbq@git-bbq-local
-codex plugin list
-~~~
+Choose one of `windows-x86_64`, `aarch64-darwin`, `x86_64-darwin`, or
+`x86_64-linux` for `--target`; use `all` to build every supported runtime.
+Hermes and Go must be available on the build machine. Package validation checks
+the manifest, registrations, and plugin security rules. The Go and Python test
+commands are in `docs/DEVELOPMENT.md`.
 
-The repository marketplace is `.agents/plugins/marketplace.json`, and
-`.codex/config.toml` enables Git BBQ for this trusted repository. The generated
-`plugins/git-bbq` directory is intentionally ignored because it contains
-compiled target runtimes.
+## Install a local build
 
-Restart the Codex host after changing the package, then test in a new thread.
+Use a runtime target that matches the host. Install the generated directory
+under the active Hermes home (`$HERMES_HOME`, or `~/.hermes` when unset). Do not
+overwrite an existing plugin directory without first reviewing it.
 
-## Lifecycle hook trust
+```sh
+plugin_home="${HERMES_HOME:-$HOME/.hermes}/plugins"
+test ! -e "$plugin_home/git-bbq" || {
+  printf '%s\n' "Plugin already exists: $plugin_home/git-bbq" >&2
+  exit 1
+}
+mkdir -p "$plugin_home"
+cp -a .tmp/git-bbq-hermes "$plugin_home/git-bbq"
+hermes plugins enable git-bbq
+hermes plugins doctor --ci "$plugin_home/git-bbq"
+```
 
-There is no separate per-plugin enable switch in the plugin settings page. The
-package declares its lifecycle hooks, and the host loads them when its hooks
-feature is enabled. This repository makes that intent explicit in
-`.codex/config.toml`.
+Restart the active Hermes process if it was already running. The package uses
+the Go binary bundled for its build target; it does not silently use a system
+binary or download one later. Build a new package and replace the installed copy
+through a deliberate update when upgrading.
 
-The plugin settings page shows package metadata; it is not the lifecycle-hook
-trust control. In Codex CLI, open the hook review surface with:
+## Install a GitHub release package
 
-~~~text
-/hooks
-~~~
+Release assets contain the plugin and its matching Go runtime, so users do not
+need Go installed. Select the asset for the host, download the archive and
+`SHA256SUMS` from the same GitHub release, verify the checksum, and extract it
+directly into the active Hermes profile's plugin directory:
 
-Review and trust the current Git BBQ hook definition there. Trust is tied to the
-definition currently installed by the host. If `hooks/hooks.json` or a hook
-command changes, the host requires another review and may skip the hook until
-it is trusted again.
+```sh
+version=0.1.0
+target=x86_64-linux # aarch64-darwin, x86_64-darwin, or windows-x86_64
+archive="git-bbq-${target}.tar.gz"
+release_url="https://github.com/averyfreeman/git-bbq-hermes/releases/download/v${version}"
+download_dir="${TMPDIR:-/tmp}/git-bbq-${version}"
+plugin_home="${HERMES_HOME:-$HOME/.hermes}/plugins"
 
-If `/hooks` does not show Git BBQ after restarting, check that the host has not
-set `[features] hooks = false`; a host or administrator policy can still
-override project configuration.
+mkdir -p "$download_dir"
+curl -fsSL "$release_url/$archive" -o "$download_dir/$archive"
+curl -fsSL "$release_url/SHA256SUMS" -o "$download_dir/SHA256SUMS"
+(cd "$download_dir" && grep " $archive$" SHA256SUMS | sha256sum -c -)
 
-`git-bbq help hooks` explains the runtime event syntax. The `git-bbq` command
-can execute a hook event, but it cannot grant host-level trust. Use
-`--dangerously-bypass-hook-trust` only for disposable local diagnostics, never
-as the normal installation path.
+test ! -e "$plugin_home/git-bbq" || {
+  printf '%s\n' "Plugin already exists: $plugin_home/git-bbq" >&2
+  exit 1
+}
+mkdir -p "$plugin_home/git-bbq"
+tar -xzf "$download_dir/$archive" -C "$plugin_home/git-bbq"
+runtime="$plugin_home/git-bbq/runtime/bin/$target/git-bbq"
+test "$target" != windows-x86_64 || runtime="$runtime.exe"
+if command -v gh >/dev/null 2>&1; then
+  source_digest="$(tr -d '\n' < "$plugin_home/git-bbq/BUILD_SOURCE_SHA")"
+  gh attestation verify "$runtime" \
+    --repo averyfreeman/git-bbq-hermes \
+    --source-digest "$source_digest"
+else
+  printf '%s\n' "Install gh to verify the runtime build attestation." >&2
+fi
+hermes plugins enable git-bbq
+hermes plugins doctor --ci "$plugin_home/git-bbq"
+```
 
-Git BBQ uses the skills-only marketplace shape with local Codex lifecycle hooks;
-it does not require an MCP server. Public submission remains separate from this
-local marketplace installation; see `PLUGIN_SUBMISSION.md` for release gates.
+The release workflow attests each Go executable to the public GitHub Actions
+build and records its source commit in `BUILD_SOURCE_SHA`. The optional
+attestation verification step requires the GitHub CLI; keep the archive checksum
+check even when attestation verification is unavailable. On Windows, use a
+POSIX-compatible shell with `curl`, `sha256sum`, `tar`, and `gh`, or verify the
+listed checksum and attestation with equivalent local utilities before
+extracting `git-bbq-windows-x86_64.tar.gz`.
 
-## Public-oriented package preflight
+For development, the repository plugin source is in `plugins/git-bbq/`, while
+the built package is in `.tmp/`. Validate the source with `hermes plugins doctor
+--ci plugins/git-bbq` and `hermes plugins validate --json plugins/git-bbq`; use
+the built package for runtime execution so its bundled Go binary is present.
 
-Build and validate a hook-free package separately from the local installation:
+## Safety and troubleshooting
 
-~~~sh
-python3 scripts/build_git_bbq_plugin.py \
-  --output .tmp/git-bbq-public \
-  --variant public \
-  --target all \
-  --force
-python3 scripts/validate_git_bbq_plugin.py .tmp/git-bbq-public \
-  --variant public \
-  --target all
-~~~
+- Local file and Git tools operate only on the selected existing workspace; the
+  plugin never auto-clones a repository.
+- Git and other mutating tools require explicit workflow approval, and the Go
+  executor retains its `--approve` gate.
+- GitHub Issues tools derive the repository from the selected workspace. Without
+  one, provide an explicit owner and repository. Authentication remains owned by
+  `gh` or the active Hermes profile environment; never put a token in chat or
+  repository files.
+- A “bundled runtime is missing” error means the package was built for a
+  different target, or the source directory was installed instead of the built
+  package. Rebuild for the host and validate the package before installing.
+- A project-local plugin under `.hermes/plugins/` is disabled by default in
+  Hermes. Enable it only for a trusted repository by setting
+  `HERMES_ENABLE_PROJECT_PLUGINS=true` before starting Hermes.
 
-The public variant contains the skills and Go CLI binaries but has no lifecycle
-hook configuration. The bundled CLI is usable only on an execution host that
-can run the local binary; installing the plugin on ChatGPT web does not grant
-local repository access or deploy that executable. A remote MCP integration
-would be needed for hosted repository operations.
+The release workflow builds platform-specific packages. A Hermes catalog entry
+is a separate reviewed distribution path; see `PLUGIN_SUBMISSION.md` for its
+current prerequisites.

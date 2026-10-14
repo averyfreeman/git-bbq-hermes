@@ -1,5 +1,10 @@
 # Product spec: upstream skills and Git BBQ plugin packaging
 
+> Status: this original Codex/portable-plugin proposal is superseded by
+> [ADR 0003](../adr/0003-hermes-native-plugin-boundary.md). It is retained as
+> historical decision context; use the Hermes integration and release guides
+> for current behavior.
+
 ## Problem Statement
 
 Git BBQ has been maintaining a vocabulary-adapted derivative of Matt Pocock's

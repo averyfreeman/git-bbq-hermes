@@ -10,18 +10,27 @@ permissions:
 jobs:
   package:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: x86_64-linux
-            artifact: git-bbq-x86_64-linux
+            package_name: git-bbq-package-x86_64-linux
+            asset_name: git-bbq-x86_64-linux.tar.gz
           - target: aarch64-darwin
-            artifact: git-bbq-aarch64-darwin
+            package_name: git-bbq-package-aarch64-darwin
+            asset_name: git-bbq-aarch64-darwin.tar.gz
           - target: x86_64-darwin
-            artifact: git-bbq-x86_64-darwin
+            package_name: git-bbq-package-x86_64-darwin
+            asset_name: git-bbq-x86_64-darwin.tar.gz
           - target: windows-x86_64
-            artifact: git-bbq-windows-x86_64
+            package_name: git-bbq-package-windows-x86_64
+            asset_name: git-bbq-windows-x86_64.tar.gz
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,17 +39,57 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Build plugin package
+      - name: Install Hermes CLI for package validation
+        run: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive --skip-browser --skip-computer-use
+      - name: Build Hermes plugin package
         run: |
           version="${GITHUB_REF_NAME#v}"
-          python3 scripts/build_git_bbq_plugin.py \
-            --output ".tmp/${{ matrix.artifact }}" \
+          python3 scripts/build_hermes_plugin.py \
+            --output ".tmp/package-${{ matrix.target }}" \
             --target "${{ matrix.target }}" \
             --plugin-version "$version" \
             --force
-      - name: Validate plugin package
-        run: python3 scripts/validate_git_bbq_plugin.py ".tmp/${{ matrix.artifact }}" --target "${{ matrix.target }}"
+      - name: Record source commit in package
+        run: printf '%s\n' "$GITHUB_SHA" > ".tmp/package-${{ matrix.target }}/BUILD_SOURCE_SHA"
+      - name: Diagnose Hermes plugin package
+        run: hermes plugins doctor --ci ".tmp/package-${{ matrix.target }}"
+      - name: Validate Hermes plugin package
+        run: hermes plugins validate --json ".tmp/package-${{ matrix.target }}"
+      - name: Attest bundled Go runtime
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ".tmp/package-${{ matrix.target }}/runtime/bin/${{ matrix.target }}/git-bbq*"
+      - name: Archive Hermes plugin package
+        run: tar -czf ".tmp/${{ matrix.asset_name }}" -C ".tmp/package-${{ matrix.target }}" .
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: .tmp/${{ matrix.artifact }}
+          name: ${{ matrix.package_name }}
+          path: .tmp/${{ matrix.asset_name }}
+          if-no-files-found: error
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: git-bbq-package-*
+          path: .tmp/release-assets
+          merge-multiple: true
+      - name: Generate release checksums
+        run: |
+          cd .tmp/release-assets
+          sha256sum git-bbq-*.tar.gz > SHA256SUMS
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            .tmp/release-assets/git-bbq-*.tar.gz \
+            .tmp/release-assets/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "Git-BBQ Hermes $GITHUB_REF_NAME" \
+            --generate-notes

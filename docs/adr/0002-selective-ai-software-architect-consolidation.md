@@ -1,8 +1,12 @@
 ---
-status: accepted
+status: superseded
 ---
 
 # Selectively consolidate AI Software Architect capabilities into Git BBQ
+
+> Superseded by [ADR 0003](./0003-hermes-native-plugin-boundary.md) for the
+> distribution and host-adapter boundary. The project scaffolding and migration
+> decisions below remain part of Git-BBQ's architecture history.
 
 ## Context
 

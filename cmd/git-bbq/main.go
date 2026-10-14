@@ -15,8 +15,6 @@ import (
 
 type stringList []string
 
-const maxHookInputBytes = 1 << 20
-
 func (values *stringList) String() string { return strings.Join(*values, ",") }
 func (values *stringList) Set(value string) error {
 	for _, item := range strings.Split(value, ",") {
@@ -62,10 +60,10 @@ func main() {
 		err = runProject(os.Args[2:])
 	case "githabits":
 		err = runGithabits(os.Args[2:])
+	case "issues":
+		err = runIssues(os.Args[2:])
 	case "update":
 		err = runUpdate(os.Args[2:])
-	case "hook":
-		err = runHook(os.Args[2:])
 	case "doctor":
 		err = runDoctor(os.Args[2:])
 	case "schema":
@@ -101,8 +99,10 @@ var helpTopicOrder = []string{
 	"githabits",
 	"githabits plan",
 	"githabits execute",
+	"githabits baseline",
+	"githabits release",
+	"issues",
 	"update",
-	"hooks",
 	"doctor",
 	"schema",
 	"version",
@@ -147,8 +147,8 @@ Create a durable architecture decision record. Options include --status,
 Read and emit the generated ADR retrieval index as JSON.`,
 	"validate": `git-bbq validate [path] [--format text|json] [--json]
 
-Validate the project contract, ADR structure, current projections, hook policy,
-and bounded secret checks for architecture artifacts.`,
+Validate the project contract, ADR structure, current projections, and bounded
+secret checks for architecture artifacts.`,
 	"project": `git-bbq project [path] [--json]
 
 Recreate the architecture contract, implementation plan, and ADR index
@@ -166,18 +166,23 @@ Preview one Git action without mutating the repository. Options include
 
 Execute one previously reviewed Git plan. Requires --approve and --action.
 Supports the same action inputs as the plan command.`,
+	"githabits release": `git-bbq githabits release [path] [--since TAG] [--format text|json] [--json]
+
+Recommend a SemVer release from conventional commits after the latest SemVer
+tag, or after an explicitly selected baseline. This command is read-only.`,
+	"githabits baseline": `git-bbq githabits baseline <plan|execute> [path] [--approve] [--json]
+
+Plan or execute the initial local tag baseline. Cleanup is limited to local tags
+that exist in upstream but not the configured origin; execution requires --approve.`,
+	"issues": `git-bbq issues <list|get|create|edit|labels|assign|comment|close|reopen|subissue|block> [options]
+
+Manage GitHub Issues with the authenticated gh CLI. A selected workspace uses
+its origin remote; remote-only operations require explicit --owner and --repo.
+All mutations require --approve. New issues default to the needs-triage label.
+Use subissue to link parent/child issues and block to record blocked-by dependencies.`,
 	"update": `git-bbq update [path] [--repository URL] [--commit SHA] [--approve] [--json]
 
 Read the pinned Matt dependency, or update it only with --approve.`,
-	"hooks": `git-bbq hook <UserPromptSubmit|PreToolUse|PostToolUse|PostCompact|Stop> [--workspace PATH]
-
-Read one Codex lifecycle event as JSON from stdin and emit a JSON hook
-response. The workspace defaults to the event workspace, current directory,
-or the current process directory. This command runs a hook; it cannot trust
-one. In Codex CLI, review and trust the current plugin definition with /hooks.
-Trust is host-managed and changes to the hook definition require re-review.
-If the hooks are not listed, check that the host has not disabled hooks with
-[features] hooks = false.`,
 	"doctor": `git-bbq doctor [path]
 
 Validate the project contract and report whether the repository is healthy.`,
@@ -205,7 +210,7 @@ func printHelp(topic string) error {
 func helpText(topic string) (string, error) {
 	if topic == "" {
 		var builder strings.Builder
-		builder.WriteString("git-bbq - Codex-ready architecture scaffolding and Git habits\n\n")
+		builder.WriteString("git-bbq - Hermes-native architecture scaffolding and Git habits\n\n")
 		builder.WriteString("Usage:\n")
 		for _, name := range helpTopicOrder {
 			firstLine := strings.SplitN(helpTopics[name], "\n", 2)[0]
@@ -255,9 +260,15 @@ func helpTopicForArgs(args []string) string {
 		if len(filtered) > 1 && (filtered[1] == "plan" || filtered[1] == "execute") {
 			return "githabits " + filtered[1]
 		}
+		if len(filtered) > 1 && filtered[1] == "release" {
+			return "githabits release"
+		}
+		if len(filtered) > 1 && filtered[1] == "baseline" {
+			return "githabits baseline"
+		}
 		return "githabits"
-	case "hook":
-		return "hooks"
+	case "issues":
+		return "issues"
 	default:
 		return filtered[0]
 	}
@@ -269,9 +280,6 @@ func normalizeHelpTopic(args []string) string {
 		if arg != "-h" && arg != "--help" {
 			filtered = append(filtered, arg)
 		}
-	}
-	if len(filtered) == 1 && filtered[0] == "hook" {
-		return "hooks"
 	}
 	return strings.Join(filtered, " ")
 }
@@ -630,6 +638,10 @@ func runGithabits(args []string) error {
 			return runGithabitsPlan(args[1:])
 		case "execute":
 			return runGithabitsExecute(args[1:])
+		case "release":
+			return runGithabitsRelease(args[1:])
+		case "baseline":
+			return runGithabitsBaseline(args[1:])
 		}
 	}
 	fs := flag.NewFlagSet("githabits", flag.ContinueOnError)
@@ -647,6 +659,66 @@ func runGithabits(args []string) error {
 		return err
 	}
 	return output(config, selectedFormat(*format, *jsonOutput))
+}
+
+func runGithabitsRelease(args []string) error {
+	fs := flag.NewFlagSet("githabits release", flag.ContinueOnError)
+	since := fs.String("since", "", "SemVer baseline tag; defaults to the latest")
+	format := fs.String("format", "text", "output format (text|json)")
+	jsonOutput := fs.Bool("json", false, "emit JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	root := "."
+	if fs.NArg() > 0 {
+		root = fs.Arg(0)
+	}
+	config, err := gitbbq.ReadGitHabits(root)
+	if err != nil {
+		return err
+	}
+	recommendation, err := gitbbq.PlanRepositoryRelease(root, config, *since)
+	if err != nil {
+		return err
+	}
+	return output(recommendation, selectedFormat(*format, *jsonOutput))
+}
+
+func runGithabitsBaseline(args []string) error {
+	if len(args) == 0 || (args[0] != "plan" && args[0] != "execute") {
+		return errors.New("githabits baseline requires the plan or execute subcommand")
+	}
+	execute := args[0] == "execute"
+	fs := flag.NewFlagSet("githabits baseline "+args[0], flag.ContinueOnError)
+	approve := fs.Bool("approve", false, "approve the complete baseline workflow")
+	format := fs.String("format", "text", "output format (text|json)")
+	jsonOutput := fs.Bool("json", false, "emit JSON")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if execute && !*approve {
+		return errors.New("githabits baseline execute requires --approve")
+	}
+	root := "."
+	if fs.NArg() > 0 {
+		root = fs.Arg(0)
+	}
+	config, err := gitbbq.ReadGitHabits(root)
+	if err != nil {
+		return err
+	}
+	plan, err := gitbbq.PlanInitialBaseline(config, root)
+	if err != nil {
+		return err
+	}
+	if !execute {
+		return output(plan, selectedFormat(*format, *jsonOutput))
+	}
+	execution, err := gitbbq.ExecuteInitialBaseline(config, root, plan, *approve, gitbbq.OSGitRunner{})
+	if err != nil {
+		return err
+	}
+	return output(execution, selectedFormat(*format, *jsonOutput))
 }
 
 func runGithabitsPlan(args []string) error {
@@ -805,43 +877,6 @@ func runUpdate(args []string) error {
 		return err
 	}
 	return output(updated.Matt, selectedFormat("text", *jsonOutput))
-}
-
-func runHook(args []string) error {
-	if len(args) == 0 {
-		return errors.New("hook requires one lifecycle event")
-	}
-	eventName := args[0]
-	fs := flag.NewFlagSet("hook", flag.ContinueOnError)
-	workspace := fs.String("workspace", "", "project workspace; defaults to the current directory")
-	if err := fs.Parse(args[1:]); err != nil {
-		return err
-	}
-	raw, err := io.ReadAll(io.LimitReader(os.Stdin, maxHookInputBytes+1))
-	if err != nil {
-		return output(gitbbq.RenderCodexHookResponse(gitbbq.HookResult{Event: eventName, Allow: false, Message: fmt.Sprintf("read hook event: %v", err)}), "json")
-	}
-	if len(raw) > maxHookInputBytes {
-		return output(gitbbq.RenderCodexHookResponse(gitbbq.HookResult{Event: eventName, Allow: false, Message: "hook input exceeds the bounded input size"}), "json")
-	}
-	var event gitbbq.HookEvent
-	if len(raw) > 0 {
-		if err := json.Unmarshal(raw, &event); err != nil {
-			return output(gitbbq.RenderCodexHookResponse(gitbbq.HookResult{Event: eventName, Allow: false, Message: fmt.Sprintf("parse hook event: %v", err)}), "json")
-		}
-	}
-	event.Event = eventName
-	if event.Workspace == "" {
-		event.Workspace = *workspace
-	}
-	if event.Workspace == "" {
-		event.Workspace = event.CWD
-	}
-	if event.Workspace == "" {
-		event.Workspace, _ = os.Getwd()
-	}
-	result := gitbbq.HandleHookInWorkspace(event.Workspace, event)
-	return output(gitbbq.RenderCodexHookResponse(result), "json")
 }
 
 func runDoctor(args []string) error {

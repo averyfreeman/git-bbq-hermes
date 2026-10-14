@@ -31,11 +31,20 @@ func TestScaffoldWritesMattNativeOutputs(t *testing.T) {
 		".agents/skills/githabits/SKILL.md",
 		".agents/skills/go/SKILL.md",
 		".agents/skills/python/SKILL.md",
-		HookConfigPath,
 	} {
 		if _, err := os.Stat(filepath.Join(root, relative)); err != nil {
 			t.Fatalf("missing %s: %v", relative, err)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(root, ".gitbbq", "hooks.json")); !os.IsNotExist(err) {
+		t.Fatalf("retired Codex lifecycle hooks were created or returned unexpected error: %v", err)
+	}
+	manifest, err := os.ReadFile(filepath.Join(root, ManifestFilename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(manifest), "hooks:") {
+		t.Fatalf("new Hermes project manifest contains retired Codex hook policy: %s", manifest)
 	}
 	if _, err := os.Stat(filepath.Join(root, "CLAUDE.md")); !os.IsNotExist(err) {
 		t.Fatalf("legacy compatibility file was created or returned unexpected error: %v", err)

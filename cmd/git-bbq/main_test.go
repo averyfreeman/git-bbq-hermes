@@ -12,6 +12,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func TestToolVersionMatchesHermesInitialRelease(t *testing.T) {
+	if gitbbq.ToolVersion != "0.1.0" {
+		t.Fatalf("tool version = %q, want initial Hermes release 0.1.0", gitbbq.ToolVersion)
+	}
+}
+
 func TestRunGithabitsExecutePersistsConfiguredRemote(t *testing.T) {
 	root := t.TempDir()
 	config, err := gitbbq.GitHabitsForProfile("autonomous")
@@ -90,6 +96,15 @@ func TestRunGithabitsPlanBuildsRemoteProvisionPlan(t *testing.T) {
 	}
 }
 
+func TestRunIssuesRequiresExplicitRemoteTargetAndMutationApproval(t *testing.T) {
+	if err := runIssues([]string{"list"}); err == nil || !strings.Contains(err.Error(), "owner and repository") {
+		t.Fatalf("remote-only issue target error = %v", err)
+	}
+	if err := runIssues([]string{"create", "--owner", "example", "--repo", "project", "--title", "Spec"}); err == nil || !strings.Contains(err.Error(), "requires --approve") {
+		t.Fatalf("issue create approval error = %v", err)
+	}
+}
+
 func TestRunUninstallDefaultsToAssessmentAndRequiresApproval(t *testing.T) {
 	root := t.TempDir()
 	if _, err := gitbbq.ScaffoldProject(root, gitbbq.ScaffoldOptions{ProjectName: "Example", Problem: "Remove only owned files.", Languages: []string{"go"}}); err != nil {
@@ -128,15 +143,12 @@ func TestHelpTopicsCoverEveryPublicCommand(t *testing.T) {
 	}
 }
 
-func TestHelpHooksExplainsCodexTrust(t *testing.T) {
-	text, err := helpText("hooks")
-	if err != nil {
-		t.Fatal(err)
+func TestCodexHookHelpIsRetired(t *testing.T) {
+	if _, err := helpText("hooks"); err == nil {
+		t.Fatal("retired Codex hook help remains available")
 	}
-	for _, expected := range []string{"UserPromptSubmit", "PreToolUse", "JSON", "stdin", "/hooks", "re-review"} {
-		if !strings.Contains(text, expected) {
-			t.Fatalf("hook help omitted %q: %q", expected, text)
-		}
+	if got := helpTopicForArgs([]string{"help", "hook"}); got != "hook" {
+		t.Fatalf("retired hook help topic = %q", got)
 	}
 }
 
@@ -145,8 +157,6 @@ func TestHelpAliasesResolveNestedTopics(t *testing.T) {
 		args []string
 		want string
 	}{
-		{args: []string{"help", "hooks"}, want: "hooks"},
-		{args: []string{"help", "hook"}, want: "hooks"},
 		{args: []string{"adr", "new", "--help"}, want: "adr new"},
 		{args: []string{"githabits", "execute", "--help"}, want: "githabits execute"},
 	}
@@ -564,7 +574,6 @@ func TestNextJSEcommerceREADMEExampleCreatesDocumentedProject(t *testing.T) {
 		".agents/skills/typescript/SKILL.md",
 		".gitbbq-manifest.yaml",
 		".gitbbq/.gitignore",
-		".gitbbq/hooks.json",
 		".gitbbq/ownership.json",
 		".gitbbq/session.json",
 		".githabits.yaml",

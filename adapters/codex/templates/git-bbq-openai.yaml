@@ -1,7 +1,0 @@
-interface:
-  display_name: "Git BBQ"
-  short_description: "Agent workflows for Git repos"
-  default_prompt: "Scaffold the repository, create durable architecture records, and review Git workflow policy."
-
-policy:
-  allow_implicit_invocation: false

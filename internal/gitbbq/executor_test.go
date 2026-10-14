@@ -4,6 +4,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -12,13 +14,30 @@ type recordingGitRunner struct {
 	calls     int
 	workspace string
 	command   []string
+	commands  [][]string
+	failAt    int
 }
 
 func (runner *recordingGitRunner) Run(workspace string, command []string) (GitRunResult, error) {
 	runner.calls++
 	runner.workspace = workspace
 	runner.command = append([]string(nil), command...)
+	runner.commands = append(runner.commands, append([]string(nil), command...))
+	if runner.calls == runner.failAt {
+		return GitRunResult{ExitCode: 1}, nil
+	}
 	return GitRunResult{ExitCode: 0}, nil
+}
+
+func setupExecutorTestRemote(t *testing.T, alias, remoteURL string) string {
+	t.Helper()
+	workspace := t.TempDir()
+	for _, arguments := range [][]string{{"init", "-q"}, {"remote", "add", alias, remoteURL}} {
+		if output, err := exec.Command("git", append([]string{"-C", workspace}, arguments...)...).CombinedOutput(); err != nil {
+			t.Fatalf("set up Git execution remote: %v\n%s", err, output)
+		}
+	}
+	return workspace
 }
 
 func TestExecuteGitPlanRequiresApprovalBeforeRunner(t *testing.T) {
@@ -45,24 +64,55 @@ func TestExecuteGitPlanRunsApprovedCommandThroughRunner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	config.Remote.Status = "configured"
+	config.Remote.URL = "https://github.com/example/project.git"
+	workspace := setupExecutorTestRemote(t, config.Remote.Alias, config.Remote.URL)
 	plan, err := PlanGitAction(config, GitActionCommit, GitPlanRequest{Message: "feat: add executor"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	runner := &recordingGitRunner{}
 
-	execution, err := ExecuteGitPlan(config, "/workspace", plan, true, runner)
+	execution, err := ExecuteGitPlan(config, workspace, plan, true, runner)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !execution.Executed || execution.ExitCode != 0 {
 		t.Fatalf("execution = %#v", execution)
 	}
-	if runner.workspace != "/workspace" {
-		t.Fatalf("workspace = %q", runner.workspace)
+	if runner.workspace != workspace {
+		t.Fatalf("workspace = %q, want %q", runner.workspace, workspace)
 	}
-	if len(runner.command) != 4 || runner.command[0] != "git" || runner.command[1] != "commit" {
-		t.Fatalf("command = %#v", runner.command)
+	if runner.calls != 2 {
+		t.Fatalf("runner calls = %d, want commit followed by configured push", runner.calls)
+	}
+	if want := []string{"git", "commit", "-m", "feat: add executor"}; !reflect.DeepEqual(runner.commands[0], want) {
+		t.Fatalf("commit command = %#v, want %#v", runner.commands[0], want)
+	}
+	if want := []string{"git", "push", "origin", "HEAD"}; !reflect.DeepEqual(runner.commands[1], want) {
+		t.Fatalf("follow-up push command = %#v, want %#v", runner.commands[1], want)
+	}
+}
+
+func TestExecuteGitPlanReportsRequiredPushFailureAfterCommit(t *testing.T) {
+	config, err := GitHabitsForProfile("autonomous")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Remote.Status = "configured"
+	config.Remote.URL = "https://github.com/example/project.git"
+	workspace := setupExecutorTestRemote(t, config.Remote.Alias, config.Remote.URL)
+	plan, err := PlanGitAction(config, GitActionCommit, GitPlanRequest{Message: "feat: add executor"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &recordingGitRunner{failAt: 2}
+
+	if _, err := ExecuteGitPlan(config, workspace, plan, true, runner); err == nil || !strings.Contains(err.Error(), "succeeded but its required follow-up push exited") {
+		t.Fatalf("follow-up push failure = %v", err)
+	}
+	if runner.calls != 2 {
+		t.Fatalf("runner calls = %d, want the commit and its failing push", runner.calls)
 	}
 }
 
@@ -273,16 +323,92 @@ func TestExecuteGitPlanPushesCommitToConfiguredRemote(t *testing.T) {
 	if _, err := ExecuteGitPlan(config, workspace, commitPlan, true, runner); err != nil {
 		t.Fatal(err)
 	}
-	pushPlan, err := PlanGitAction(config, GitActionPush, GitPlanRequest{Branch: "main"})
+	tagPlan, err := PlanGitAction(config, GitActionTag, GitPlanRequest{Tag: "v0.1.0"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ExecuteGitPlan(config, workspace, pushPlan, true, runner); err != nil {
+	if _, err := ExecuteGitPlan(config, workspace, tagPlan, true, runner); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := exec.Command("git", "--git-dir", bareRemote, "show-ref", "--verify", "refs/heads/main").Output(); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := exec.Command("git", "--git-dir", bareRemote, "show-ref", "--verify", "refs/tags/v0.1.0").Output(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExecuteGitPlanRejectsRetargetedRemoteBeforeCommit(t *testing.T) {
+	workspace := t.TempDir()
+	configuredRemote := filepath.Join(t.TempDir(), "configured.git")
+	retargetedRemote := filepath.Join(t.TempDir(), "retargeted.git")
+	for _, remote := range []string{configuredRemote, retargetedRemote} {
+		if output, err := exec.Command("git", "init", "--bare", "-q", remote).CombinedOutput(); err != nil {
+			t.Fatalf("initialize test remote: %v\n%s", err, output)
+		}
+	}
+	for _, arguments := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"config", "user.name", "Git-BBQ Test"},
+		{"config", "user.email", "test@example.invalid"},
+		{"remote", "add", "origin", configuredRemote},
+	} {
+		if output, err := exec.Command("git", append([]string{"-C", workspace}, arguments...)...).CombinedOutput(); err != nil {
+			t.Fatalf("initialize workspace Git state: %v\n%s", err, output)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "README.md"), []byte("baseline\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command("git", "-C", workspace, "add", "README.md").CombinedOutput(); err != nil {
+		t.Fatalf("stage test baseline: %v\n%s", err, output)
+	}
+	if output, err := exec.Command("git", "-C", workspace, "commit", "-qm", "chore: baseline").CombinedOutput(); err != nil {
+		t.Fatalf("create test baseline: %v\n%s", err, output)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, "feature.txt"), []byte("pending change\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command("git", "-C", workspace, "add", "feature.txt").CombinedOutput(); err != nil {
+		t.Fatalf("stage feature change: %v\n%s", err, output)
+	}
+	before, err := exec.Command("git", "-C", workspace, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config, err := GitHabitsForProfile("autonomous")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Remote.Status = "configured"
+	config.Remote.URL = configuredRemote
+	plan, err := PlanGitAction(config, GitActionCommit, GitPlanRequest{Message: "feat: guard push destination"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.Allowed || len(plan.FollowUpCommands) != 1 {
+		t.Fatalf("commit was not planned with its required push: %#v", plan)
+	}
+	if output, err := exec.Command("git", "-C", workspace, "remote", "set-url", "origin", retargetedRemote).CombinedOutput(); err != nil {
+		t.Fatalf("retarget workspace remote: %v\n%s", err, output)
+	}
+
+	if _, err := ExecuteGitPlan(config, workspace, plan, true, OSGitRunner{Timeout: time.Second}); err == nil {
+		t.Fatal("execution accepted a remote alias that no longer matches GitHabits")
+	} else {
+		t.Logf("rejected retargeted remote as expected: %v", err)
+	}
+	after, err := exec.Command("git", "-C", workspace, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("commit ran before the changed push destination was rejected")
+	}
+	if _, err := exec.Command("git", "--git-dir", retargetedRemote, "show-ref", "--verify", "refs/heads/main").Output(); err == nil {
+		t.Fatal("retargeted remote received an unexpected branch")
 	}
 }
 
@@ -292,6 +418,8 @@ func TestExecuteGitPlanCreatesAnnotatedSemverTag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	config.Push.AfterCommit = false
+	config.Push.AfterTag = false
 	runner := OSGitRunner{Timeout: time.Second}
 
 	initPlan, err := PlanGitAction(config, GitActionInit, GitPlanRequest{})
